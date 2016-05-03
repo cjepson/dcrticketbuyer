@@ -21,6 +21,7 @@ var (
 	log        = btclog.Disabled
 	daemonLog  = btclog.Disabled
 	walletLog  = btclog.Disabled
+	clientLog  = btclog.Disabled
 )
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
@@ -28,6 +29,7 @@ var subsystemLoggers = map[string]btclog.Logger{
 	"TKBY": log,
 	"DCRD": daemonLog,
 	"DCRW": walletLog,
+	"RPCC": clientLog,
 }
 
 // logClosure is used to provide a closure over expensive logging operations
@@ -61,6 +63,8 @@ func useLogger(subsystemID string, logger btclog.Logger) {
 		daemonLog = logger
 	case "DCRW":
 		walletLog = logger
+	case "RPCC":
+		clientLog = logger
 	}
 }
 

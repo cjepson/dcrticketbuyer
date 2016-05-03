@@ -16,32 +16,38 @@ import (
 )
 
 const (
-	// windowsToConsider is the number of windows to consider
-	// when there is not enough block information to determine
-	// what the best fee should be.
-	windowsToConsider = 10
-
 	// stakeInfoReqTries is the maximum number of times to try
 	// GetStakeInfo before failing.
 	stakeInfoReqTries = 10
 
-	// stakeInfoReqTryDelay is the time in seconds to wait before
-	// doing another GetStakeInfo request.
-	stakeInfoReqTryDelay = 1
+	// windowsToConsider is the number of windows to consider
+	// when there is not enough block information to determine
+	// what the best fee should be.
+	windowsToConsider = 10
 )
 
-// walletSvrManager
-type walletSvrManager struct {
+var (
+	// stakeInfoReqTryDelay is the time in seconds to wait before
+	// doing another GetStakeInfo request.
+	stakeInfoReqTryDelay = time.Second * 2
+
+	// zeroUint32 is the zero value for a uint32.
+	zeroUint32 = uint32(0)
+)
+
+// purchaseManager is the main handler of websocket notifications to
+// pass to the purchaser and internal quit notifications.
+type purchaseManager struct {
 	purchaser          *ticketPurchaser
 	blockConnectedChan chan int32
 	quit               chan struct{}
 }
 
-// newwalletSvrManager
-func newWalletSvrManager(purchaser *ticketPurchaser,
+// newPurchaseManager creates a new purchaseManager.
+func newPurchaseManager(purchaser *ticketPurchaser,
 	blockConnChan chan int32,
-	quit chan struct{}) *walletSvrManager {
-	return &walletSvrManager{
+	quit chan struct{}) *purchaseManager {
+	return &purchaseManager{
 		purchaser:          purchaser,
 		blockConnectedChan: blockConnChan,
 		quit:               quit,
@@ -50,26 +56,34 @@ func newWalletSvrManager(purchaser *ticketPurchaser,
 
 // blockConnectedHandler handles block connected notifications, which trigger
 // ticket purchases.
-func (w *walletSvrManager) blockConnectedHandler() {
+func (p *purchaseManager) blockConnectedHandler() {
 out:
 	for {
 		select {
-		case height := <-w.blockConnectedChan:
+		case height := <-p.blockConnectedChan:
 			daemonLog.Infof("Block height %v connected", height)
-			err := w.purchaser.purchase(height)
+			err := p.purchaser.purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
 					err.Error())
 			}
 		// TODO Poll every couple minute to check if connected;
 		// if not, try to reconnect.
-		case <-w.quit:
+		case <-p.quit:
 			break out
 		}
 	}
 }
 
-// ticketPurchaser
+// ticketPurchaser is the main handler for purchasing tickets. It decides
+// whether or not to do so based on information obtained from daemon and
+// wallet chain servers.
+//
+// The variables at the end handle a simple "queue" of tickets to purchase,
+// which is equal to the number in toBuyDiffPeriod. toBuyDiffPeriod gets
+// reset when we enter a new difficulty period because a new block has been
+// connected that is outside the previous difficulty period. The variable
+// purchasedDiffPeriod tracks the number purchased in this period.
 type ticketPurchaser struct {
 	cfg                 *config
 	dcrdChainSvr        *dcrrpcclient.Client
@@ -77,26 +91,28 @@ type ticketPurchaser struct {
 	ticketAddress       dcrutil.Address
 	poolAddress         dcrutil.Address
 	firstStart          bool
-	idxDiffPeriod       int
-	toBuyDiffPeriod     int
-	purchasedDiffPeriod int
+	windowPeriod        int // The current window period
+	idxDiffPeriod       int // Relative block index within the difficulty period
+	toBuyDiffPeriod     int // Number to buy in this period
+	purchasedDiffPeriod int // Number already bought in this period
 }
 
-// newTicketPurchaser
+// newTicketPurchaser creates a new ticketPurchaser.
 func newTicketPurchaser(cfg *config,
 	dcrdChainSvr *dcrrpcclient.Client,
 	dcrwChainSvr *dcrrpcclient.Client) (*ticketPurchaser, error) {
 	var ticketAddress dcrutil.Address
 	var err error
 	if cfg.TicketAddress != "" {
-		ticketAddress, err = dcrutil.DecodeAddress(cfg.TicketAddress, activeNet)
+		ticketAddress, err = dcrutil.DecodeAddress(cfg.TicketAddress,
+			activeNet.Params)
 		if err != nil {
 			return nil, err
 		}
 	}
 	var poolAddress dcrutil.Address
 	if cfg.PoolAddress != "" {
-		poolAddress, err = dcrutil.DecodeAddress(cfg.PoolAddress, activeNet)
+		poolAddress, err = dcrutil.DecodeNetworkAddress(cfg.PoolAddress)
 		if err != nil {
 			return nil, err
 		}
@@ -112,14 +128,16 @@ func newTicketPurchaser(cfg *config,
 	}, nil
 }
 
-// diffPeriodFee
+// diffPeriodFee defines some statistics about a difficulty fee period
+// compared to the current difficulty period.
 type diffPeriodFee struct {
 	difficulty float64
 	difference float64 // Difference from current difficulty
 	fee        float64
 }
 
-// diffPeriodFees
+// diffPeriodFees is slice type definition used to satisfy the sorting
+// interface.
 type diffPeriodFees []*diffPeriodFee
 
 func (p diffPeriodFees) Len() int { return len(p) }
@@ -134,7 +152,8 @@ func (p diffPeriodFees) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 // takes an average fee from the closest one.
 func (t *ticketPurchaser) findClosestMeanFeeWindows(difficulty float64) (float64,
 	error) {
-	info, err := t.dcrdChainSvr.TicketFeeInfo(0, windowsToConsider)
+	wtcUint32 := uint32(windowsToConsider)
+	info, err := t.dcrdChainSvr.TicketFeeInfo(&zeroUint32, &wtcUint32)
 	if err != nil {
 		return 0.0, err
 	}
@@ -174,10 +193,11 @@ func (t *ticketPurchaser) findClosestMeanFeeWindows(difficulty float64) (float64
 	return sortable[0].fee, nil
 }
 
-// findMeanFeeBlocks finds the mean of the mean of fees from BlocksToAvg many
-// blocks using the ticketfeeinfo RPC API.
-func (t *ticketPurchaser) findMeanFeeBlocks() (float64, error) {
-	info, err := t.dcrdChainSvr.TicketFeeInfo(uint32(t.cfg.BlocksToAvg), 0)
+// findMeanTicketFeeBlocks finds the mean of the mean of fees from BlocksToAvg
+// many blocks using the ticketfeeinfo RPC API.
+func (t *ticketPurchaser) findMeanTicketFeeBlocks() (float64, error) {
+	btaUint32 := uint32(t.cfg.BlocksToAvg)
+	info, err := t.dcrdChainSvr.TicketFeeInfo(&btaUint32, nil)
 	if err != nil {
 		return 0.0, err
 	}
@@ -194,18 +214,42 @@ func (t *ticketPurchaser) findMeanFeeBlocks() (float64, error) {
 // TODO Fix off by one bug in purchasing by height.
 func (t *ticketPurchaser) purchase(height int32) error {
 	// Just starting up, initialize our purchaser and start
-	// buying.
+	// buying. Set the start up regular transaction fee here
+	// too.
 	winSize := int32(activeNet.StakeDiffWindowSize)
 	fillTicketQueue := false
 	if t.firstStart {
 		t.idxDiffPeriod = int(height % winSize)
 		fillTicketQueue = true
 		t.firstStart = false
-	} else {
-		// First we check to see if we're in a new difficulty period.
+
+		log.Tracef("First run time, initialized idxDiffPeriod to %v",
+			t.idxDiffPeriod)
+
+		txFeeAmt, err := dcrutil.NewAmount(t.cfg.TxFee)
+		if err != nil {
+			log.Errorf("Failed to decode tx fee amount %v from config",
+				t.cfg.TxFee)
+		} else {
+			errSet := t.dcrwChainSvr.SetTxFee(txFeeAmt)
+			if errSet != nil {
+				log.Errorf("Failed to set tx fee amount %v in wallet",
+					txFeeAmt)
+			} else {
+				log.Tracef("Setting of network regular tx relay fee to %v "+
+					"was successful", txFeeAmt)
+			}
+		}
+	}
+
+	// The general case initialization for this function. It
+	// sets our index in the difficulty period, and then
+	// decides if it needs to fill the queue with tickets to
+	// purchase.
+	if !t.firstStart {
+		// Check to see if we're in a new difficulty period.
 		// Roll over all of our variables if this is true.
-		t.idxDiffPeriod = int(height % winSize)
-		if height%winSize == 0 {
+		if (height+1)%winSize == 0 {
 			log.Tracef("Resetting stake window ticket variables "+
 				"at height %v", height)
 
@@ -213,22 +257,32 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			t.purchasedDiffPeriod = 0
 			fillTicketQueue = true
 		}
+
+		// We may have disconnected and reconnected in a
+		// different window period. If this is the case,
+		// we need reset our variables too.
+		thisWindowPeriod := int(height / winSize)
+		if (height+1)%winSize != 0 &&
+			thisWindowPeriod > t.windowPeriod {
+			t.toBuyDiffPeriod = 0
+			t.purchasedDiffPeriod = 0
+			fillTicketQueue = true
+		}
+
+		// Move the respective cursors for our positions
+		// in the blockchain.
+		t.idxDiffPeriod = int(height % winSize)
+		t.windowPeriod = int(height / winSize)
 	}
 
 	// We need to figure out how many tickets to buy.
 	// Apply an exponential decay penalty to prices
 	// that are above the mean price for the entire
 	// ticket pool.
-	// TODO We need the next block ticket difficulty,
-	// not the current one. For now use the current
-	// one until the RPC is wire to fetch the next
-	// stake difficulty. That also means that instead
-	// of beginning buying at the 0th block of the
-	// window period, we begin buying at the -1 block
-	// of the window period.
-
+	//
 	// It can take a little while for the wallet to sync,
-	// so loop this and
+	// so loop this and recheck to see if we've got the
+	// next block attached yet.
 	var curStakeInfo *dcrjson.GetStakeInfoResult
 	var err error
 	for i := 0; i < stakeInfoReqTries; i++ {
@@ -236,19 +290,31 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		if err != nil {
 			log.Tracef("Failed to fetch stake information "+
 				"on attempt %v: %v", i, err.Error())
-			time.Sleep(time.Second * stakeInfoReqTryDelay)
+			time.Sleep(stakeInfoReqTryDelay)
 			continue
 		}
 	}
 	if err != nil {
 		return err
 	}
+	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
+	if err != nil {
+		return err
+	}
+	nextStakeDiff, err := dcrutil.NewAmount(stakeDiffs.NextStakeDifficulty)
+	if err != nil {
+		return err
+	}
+	maxPriceAmt, err := dcrutil.NewAmount(t.cfg.MaxPrice)
+	if err != nil {
+		return err
+	}
 
-	// Disable purchasing if the ticket price is too hgih.
-	if curStakeInfo.Difficulty > t.cfg.MaxPrice {
+	// Disable purchasing if the ticket price is too high.
+	if nextStakeDiff > maxPriceAmt {
 		log.Tracef("Aborting ticket purchases because the ticket price %v "+
-			"is higher than the maximum price %v", curStakeInfo.Difficulty,
-			t.cfg.MaxPrice)
+			"is higher than the maximum price %v", nextStakeDiff,
+			maxPriceAmt)
 		return nil
 	}
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType("default", 0,
@@ -257,9 +323,13 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		return err
 	}
 
+	// This is the main portion that handles filling up the
+	// queue of tickets to purchase (t.toBuyDiffPeriod).
 	if fillTicketQueue {
 		// First get the average price of a ticket in
-		// the ticket pool.
+		// the ticket pool. Then get the VWAP price aside
+		// from the pool price. Calculate an average
+		// price by finding the mean.
 		poolValue, err := t.dcrdChainSvr.GetTicketPoolValue()
 		if err != nil {
 			return err
@@ -273,18 +343,28 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			return err
 		}
 		poolSize := bestBlock.MsgBlock().Header.PoolSize
-		avgPrice := poolValue.ToCoin() / float64(poolSize)
-		curPrice := curStakeInfo.Difficulty
-		couldBuy := math.Floor(balSpendable.ToCoin() / curStakeInfo.Difficulty)
+		avgPricePoolAmt := poolValue / dcrutil.Amount(poolSize)
+		ticketVWAP, err := t.dcrdChainSvr.TicketVWAP(nil, nil)
+		if err != nil {
+			return err
+		}
+		avgPriceAmt := (ticketVWAP + avgPricePoolAmt) / 2
+		avgPrice := avgPriceAmt.ToCoin()
+		log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
+
+		// Calculate how many tickets we could possibly buy
+		// at this difficulty.
+		curPrice := nextStakeDiff
+		couldBuy := math.Floor(balSpendable.ToCoin() / nextStakeDiff.ToCoin())
 
 		// Decay exponentially if the price is above the average
 		// price.
 		// floor(penalty ^ -(abs(ticket price - average ticket price)))
 		// Then multiply by the number of tickets we could possibly
 		// buy.
-		if curPrice > avgPrice {
+		if curPrice.ToCoin() > avgPrice {
 			toBuy := math.Floor(math.Pow(t.cfg.HighPricePenalty,
-				-(math.Abs(curPrice-avgPrice))) * couldBuy)
+				-(math.Abs(curPrice.ToCoin()-avgPrice))) * couldBuy)
 			t.toBuyDiffPeriod = int(float64(toBuy))
 
 			log.Debugf("The current price %v is above the average price %v, "+
@@ -314,12 +394,12 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// window with the closest difficulty.
 	meanFee := 0.0
 	if t.idxDiffPeriod < t.cfg.BlocksToAvg {
-		meanFee, err = t.findClosestMeanFeeWindows(curStakeInfo.Difficulty)
+		meanFee, err = t.findClosestMeanFeeWindows(nextStakeDiff.ToCoin())
 		if err != nil {
 			return err
 		}
 	} else {
-		meanFee, err = t.findMeanFeeBlocks()
+		meanFee, err = t.findMeanTicketFeeBlocks()
 		if err != nil {
 			return err
 		}
@@ -364,13 +444,13 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	}
 
 	// Check our balance and abort if we don't have enough moneys.
-	if (balSpendable.ToCoin() - float64(toBuyForBlock)*curStakeInfo.Difficulty) <
+	if (balSpendable.ToCoin() - float64(toBuyForBlock)*nextStakeDiff.ToCoin()) <
 		t.cfg.BalanceToMaintain {
 		log.Tracef("Aborting purchasing of tickets because our balance "+
 			"after buying tickets is estimated to be %v but balance "+
 			"to maintain is set to %v",
 			(balSpendable.ToCoin() - float64(toBuyForBlock)*
-				curStakeInfo.Difficulty),
+				nextStakeDiff.ToCoin()),
 			t.cfg.BalanceToMaintain)
 		return nil
 	}
@@ -388,10 +468,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		}
 	}
 
-	maxPriceAmt, err := dcrutil.NewAmount(t.cfg.MaxPrice)
-	if err != nil {
-		return err
-	}
+	// Purchase tickets.
 	poolFeesAmt, err := dcrutil.NewAmount(t.cfg.PoolFees)
 	if err != nil {
 		return err
@@ -413,7 +490,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 
 	for i := range tickets {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
-			"fees per KB used)", tickets[i], curStakeInfo.Difficulty,
+			"fees per KB used)", tickets[i], nextStakeDiff.ToCoin(),
 			feeToUseAmt.ToCoin())
 	}
 

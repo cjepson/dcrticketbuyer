@@ -17,7 +17,7 @@ import (
 
 const (
 	// blockConnChanBuffer is the size of the block connected channel buffer.
-	blockConnChanBuffer = 1000
+	blockConnChanBuffer = 100
 )
 
 func main() {
@@ -29,11 +29,13 @@ func main() {
 	}
 	defer backendLog.Flush()
 
+	dcrrpcclient.UseLogger(clientLog)
+
 	// Connect to dcrd RPC server using websockets. Set up the
 	// notification handler to deliver blocks through a channel.
 	connectChan := make(chan int32, blockConnChanBuffer)
 	quit := make(chan struct{})
-	ntfnHandlers := dcrrpcclient.NotificationHandlers{
+	ntfnHandlersDaemon := dcrrpcclient.NotificationHandlers{
 		OnBlockConnected: func(hash *chainhash.Hash, height int32,
 			time time.Time, vb uint16) {
 			connectChan <- height
@@ -56,7 +58,7 @@ func main() {
 		Pass:         cfg.DcrdPass,
 		Certificates: dcrdCerts,
 	}
-	dcrdClient, err := dcrrpcclient.New(connCfgDaemon, &ntfnHandlers)
+	dcrdClient, err := dcrrpcclient.New(connCfgDaemon, &ntfnHandlersDaemon)
 	if err != nil {
 		fmt.Printf("Failed to start dcrd rpcclient: %s\n", err.Error())
 		os.Exit(1)
@@ -106,7 +108,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	wsm := newWalletSvrManager(purchaser, connectChan, quit)
+	wsm := newPurchaseManager(purchaser, connectChan, quit)
 	go wsm.blockConnectedHandler()
 
 	log.Infof("Daemon and wallet successfully connected, beginning " +
@@ -114,6 +116,8 @@ func main() {
 
 	<-quit
 	close(quit)
+	dcrdClient.Disconnect()
+	dcrwClient.Disconnect()
 	fmt.Printf("\nClosing ticket buyer.\n")
 	os.Exit(1)
 }

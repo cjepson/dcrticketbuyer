@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	flags "github.com/btcsuite/go-flags"
-	"github.com/decred/dcrd/chaincfg"
 	"github.com/decred/dcrutil"
+	"github.com/decred/dcrwallet/netparams"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 )
 
 var curDir, _ = os.Getwd()
-var activeNet = &chaincfg.MainNetParams
+var activeNet = &netparams.MainNetParams
 
 var (
 	dcrdHomeDir              = dcrutil.AppDataDir("dcrd", false)
@@ -36,12 +36,14 @@ var (
 	defaultWalletRPCKeyFile  = filepath.Join(dcrwalletHomeDir, "rpc.key")
 	defaultWalletRPCCertFile = filepath.Join(dcrwalletHomeDir, "rpc.cert")
 	defaultLogDir            = filepath.Join(curDir, defaultLogDirname)
+	defaultHost              = "127.0.0.1"
 
 	defaultAccountName       = "default"
 	defaultTicketAddress     = ""
 	defaultPoolAddress       = ""
 	defaultMaxFee            = 1.0
 	defaultMinFee            = 0.01
+	defaultTxFee             = 0.01
 	defaultMaxPrice          = 100.0
 	defaultMaxPerBlock       = 3
 	defaultBalanceToMaintain = 0.0
@@ -76,15 +78,16 @@ type config struct {
 	AccountName       string  `long:"accountname" description:"Name of the account to buy tickets from (default: default)"`
 	TicketAddress     string  `long:"ticketaddress" description:"Address to give ticket voting rights to"`
 	PoolAddress       string  `long:"pooladdress" description:"Address to give pool fees rights to"`
-	PoolFees          float64 `long:"poolfees" description:"The pool fee base rate for a given pool"`
-	MaxPrice          float64 `long:"maxprice" description:"Maximum price to pay for a ticket (default: 100)"`
-	MaxFee            float64 `long:"maxfee" description:"Maximum ticket fee per KB (default: 1.0)"`
-	MinFee            float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01)"`
+	PoolFees          float64 `long:"poolfees" description:"The pool fee base rate for a given pool as a percentage (0.01 to 100.00%)"`
+	MaxPrice          float64 `long:"maxprice" description:"Maximum price to pay for a ticket (default: 100.0 Coin)"`
+	MaxFee            float64 `long:"maxfee" description:"Maximum ticket fee per KB (default: 1.0 Coin/KB)"`
+	MinFee            float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01 Coin/KB)"`
+	TxFee             float64 `long:"txfee" description:"Default regular tx fee per KB, for consolidations (default: 0.01 Coin/KB)"`
 	MaxPerBlock       int     `long:"maxperblock" description:"Maximum tickets per block (default: 3)"`
 	BalanceToMaintain float64 `long:"balancetomaintain" description:"Balance to try to maintain in the wallet"`
 	HighPricePenalty  float64 `long:"highpricepenality" description:"The exponential penalty to apply to the number of tickets to purchase above the mean ticket pool price (default: 1.3)"`
 	BlocksToAvg       int     `long:"blockstoavg" description:"Number of blocks to average for fees calculation (default: 11)"`
-	FeeTargetScaling  float64 `long:"feetargetscaling" description:"The amount above the mean fee in the previous blocks to purchase tickets with, proportional (default: 1.05)"`
+	FeeTargetScaling  float64 `long:"feetargetscaling" description:"The amount above the mean fee in the previous blocks to purchase tickets with, proportional e.g. 1.05 = 105% (default: 1.05)"`
 	WaitForTickets    bool    `long:"waitfortickets" description:"Wait until your last round of tickets have entered the blockchain to attempt to purchase more (default: true)"`
 	ExpiryDelta       int     `long:"expirydelta" description:"Number of blocks in the future before the ticket expires (default: 16)"`
 }
@@ -207,6 +210,7 @@ func loadConfig() (*config, error) {
 		PoolAddress:       defaultPoolAddress,
 		MaxFee:            defaultMaxFee,
 		MinFee:            defaultMinFee,
+		TxFee:             defaultTxFee,
 		MaxPrice:          defaultMaxPrice,
 		MaxPerBlock:       defaultMaxPerBlock,
 		BalanceToMaintain: defaultBalanceToMaintain,
@@ -287,13 +291,13 @@ func loadConfig() (*config, error) {
 	// Choose the active network params based on the selected network.
 	// Multiple networks can't be selected simultaneously.
 	numNets := 0
-	activeNet = &chaincfg.MainNetParams
+	activeNet = &netparams.MainNetParams
 	if cfg.TestNet {
-		activeNet = &chaincfg.TestNetParams
+		activeNet = &netparams.TestNetParams
 		numNets++
 	}
 	if cfg.SimNet {
-		activeNet = &chaincfg.SimNetParams
+		activeNet = &netparams.SimNetParams
 		numNets++
 	}
 	if numNets > 1 {
@@ -303,6 +307,25 @@ func loadConfig() (*config, error) {
 		fmt.Fprintln(os.Stderr, err)
 		parser.WriteHelp(os.Stderr)
 		return loadConfigError(err)
+	}
+
+	// If the user has set a pool address, the pool fees for the
+	// pool can not be zero.
+	if cfg.PoolAddress != "" && cfg.PoolFees == 0.0 {
+		str := "%s: Pool address is set but pool fees are unset or 0.00%"
+		err := fmt.Errorf(str, "loadConfig")
+		fmt.Fprintln(os.Stderr, err)
+		parser.WriteHelp(os.Stderr)
+		return loadConfigError(err)
+	}
+
+	// Set the host names and ports to the default if the
+	// user does not specify them.
+	if cfg.DcrdServ == "" {
+		cfg.DcrdServ = defaultHost + ":" + activeNet.DefaultPort
+	}
+	if cfg.DcrwServ == "" {
+		cfg.DcrwServ = defaultHost + ":" + activeNet.RPCServerPort
 	}
 
 	// Append the network type to the log directory so it is "namespaced"
