@@ -42,11 +42,14 @@ func main() {
 		},
 	}
 
-	dcrdCerts, err := ioutil.ReadFile(cfg.DcrdCert)
-	if err != nil {
-		fmt.Printf("Failed to read dcrd cert file at %s: %s\n", cfg.DcrdCert,
-			err.Error())
-		os.Exit(1)
+	var dcrdCerts []byte
+	if !cfg.DisableClientTLS {
+		dcrdCerts, err = ioutil.ReadFile(cfg.DcrdCert)
+		if err != nil {
+			fmt.Printf("Failed to read dcrd cert file at %s: %s\n", cfg.DcrdCert,
+				err.Error())
+			os.Exit(1)
+		}
 	}
 	log.Debugf("Attempting to connect to dcrd RPC %s as user %s, pass %s "+
 		"using certificate located in %s",
@@ -57,6 +60,7 @@ func main() {
 		User:         cfg.DcrdUser,
 		Pass:         cfg.DcrdPass,
 		Certificates: dcrdCerts,
+		DisableTLS:   cfg.DisableClientTLS,
 	}
 	dcrdClient, err := dcrrpcclient.New(connCfgDaemon, &ntfnHandlersDaemon)
 	if err != nil {
@@ -72,10 +76,13 @@ func main() {
 	}
 
 	// Connect to the dcrwallet server RPC client.
-	dcrwCerts, err := ioutil.ReadFile(cfg.DcrwCert)
-	if err != nil {
-		fmt.Printf("Failed to read dcrwallet cert file at %s: %s\n", cfg.DcrwCert,
-			err.Error())
+	var dcrwCerts []byte
+	if !cfg.DisableClientTLS {
+		dcrwCerts, err = ioutil.ReadFile(cfg.DcrwCert)
+		if err != nil {
+			fmt.Printf("Failed to read dcrwallet cert file at %s: %s\n",
+				cfg.DcrwCert, err.Error())
+		}
 	}
 	connCfgWallet := &dcrrpcclient.ConnConfig{
 		Host:         cfg.DcrwServ,
@@ -83,6 +90,7 @@ func main() {
 		User:         cfg.DcrwUser,
 		Pass:         cfg.DcrwPass,
 		Certificates: dcrwCerts,
+		DisableTLS:   cfg.DisableClientTLS,
 	}
 	log.Debugf("Attempting to connect to dcrwallet RPC %s as user %s, pass %s "+
 		"using certificate located in %s",
