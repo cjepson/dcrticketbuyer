@@ -264,6 +264,10 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	thisWindowPeriod := int(height / winSize)
 	if (height+1)%winSize != 0 &&
 		thisWindowPeriod > t.windowPeriod {
+		log.Tracef("Detected assymetry in this window period versus "+
+			"stored window period, resetting purchase orders at "+
+			"height %v", height)
+
 		t.toBuyDiffPeriod = 0
 		t.purchasedDiffPeriod = 0
 		fillTicketQueue = true
@@ -435,7 +439,8 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	log.Debugf("Mean fee for the last blocks or window period was %v; "+
 		"this was scaled to %v", meanFee, feeToUse)
 
-	// Purchase tickets.
+	// Only the maximum number of tickets at each block
+	// should be purchased, as specified by the user.
 	toBuyForBlock := t.toBuyDiffPeriod - t.purchasedDiffPeriod
 	if toBuyForBlock > t.cfg.MaxPerBlock {
 		toBuyForBlock = t.cfg.MaxPerBlock
