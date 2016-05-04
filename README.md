@@ -63,7 +63,7 @@ configuration file that specifies exactly the type of behavior they would
 prefer for ticket purchase. For reference, these options are given below.
 
 ```
--C, --configfile=        Path to configuration file
+  -C, --configfile=        Path to configuration file
                            (../dcrticketbuyer/ticketbuyer.conf)
   -V, --version            Display version information and exit
       --testnet            Use the test network (default mainnet)
