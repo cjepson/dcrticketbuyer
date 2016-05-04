@@ -62,7 +62,8 @@ runs. The user should read over these options carefully and create a
 configuration file that specifies exactly the type of behavior they would 
 prefer for ticket purchase. For reference, these options are given below.
 
-```-C, --configfile=        Path to configuration file
+```
+-C, --configfile=        Path to configuration file
                            (../dcrticketbuyer/ticketbuyer.conf)
   -V, --version            Display version information and exit
       --testnet            Use the test network (default mainnet)
@@ -113,14 +114,15 @@ prefer for ticket purchase. For reference, these options are given below.
                            blockchain to attempt to purchase more (default: true)
       --expirydelta=       Number of blocks in the future before the ticket expires
                            (default: 16) (16)
-````
+```
 
 #### Linux/BSD/POSIX/Source
 
 It is recommended to use a configuration file to fine tune the software. A 
 sample configuration file is give below.
 
-```dcrduser=USER
+```
+dcrduser=USER
 dcrdpass=PASSWORD
 dcrdserv=127.0.0.1:9876
 dcrwuser=USER
@@ -132,12 +134,13 @@ ticketaddress=SsfRowMCXPEc3gmt3KVo8q5h9dfRqqxkqM5
 pooladdress=Ssha8j5pm79HcPoQiEEYcP7dp7pUBVbiTJu
 poolfees=1.23
 txfee=0.00001
-````
+```
 
 The program may then be run with
 
-```> dcrtickeybuyer -C ticketbuyer.conf
-````
+```bash
+$ dcrtickeybuyer -C ticketbuyer.conf
+```
 
 ## IRC
 
