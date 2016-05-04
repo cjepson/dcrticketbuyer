@@ -316,11 +316,13 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			maxPriceAmt)
 		return nil
 	}
-	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType("default", 0,
-		"spendable")
+	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
+		0, "spendable")
 	if err != nil {
 		return err
 	}
+	log.Debugf("Current spendable balance at height %v for account '%s': %v",
+		height, t.cfg.AccountName, balSpendable)
 
 	// This is the main portion that handles filling up the
 	// queue of tickets to purchase (t.toBuyDiffPeriod).
