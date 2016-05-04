@@ -220,6 +220,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	fillTicketQueue := false
 	if t.firstStart {
 		t.idxDiffPeriod = int(height % winSize)
+		t.windowPeriod = int(height / winSize)
 		fillTicketQueue = true
 		t.firstStart = false
 
@@ -246,34 +247,32 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// sets our index in the difficulty period, and then
 	// decides if it needs to fill the queue with tickets to
 	// purchase.
-	if !t.firstStart {
-		// Check to see if we're in a new difficulty period.
-		// Roll over all of our variables if this is true.
-		if (height+1)%winSize == 0 {
-			log.Tracef("Resetting stake window ticket variables "+
-				"at height %v", height)
+	// Check to see if we're in a new difficulty period.
+	// Roll over all of our variables if this is true.
+	if (height+1)%winSize == 0 {
+		log.Tracef("Resetting stake window ticket variables "+
+			"at height %v", height)
 
-			t.toBuyDiffPeriod = 0
-			t.purchasedDiffPeriod = 0
-			fillTicketQueue = true
-		}
-
-		// We may have disconnected and reconnected in a
-		// different window period. If this is the case,
-		// we need reset our variables too.
-		thisWindowPeriod := int(height / winSize)
-		if (height+1)%winSize != 0 &&
-			thisWindowPeriod > t.windowPeriod {
-			t.toBuyDiffPeriod = 0
-			t.purchasedDiffPeriod = 0
-			fillTicketQueue = true
-		}
-
-		// Move the respective cursors for our positions
-		// in the blockchain.
-		t.idxDiffPeriod = int(height % winSize)
-		t.windowPeriod = int(height / winSize)
+		t.toBuyDiffPeriod = 0
+		t.purchasedDiffPeriod = 0
+		fillTicketQueue = true
 	}
+
+	// We may have disconnected and reconnected in a
+	// different window period. If this is the case,
+	// we need reset our variables too.
+	thisWindowPeriod := int(height / winSize)
+	if (height+1)%winSize != 0 &&
+		thisWindowPeriod > t.windowPeriod {
+		t.toBuyDiffPeriod = 0
+		t.purchasedDiffPeriod = 0
+		fillTicketQueue = true
+	}
+
+	// Move the respective cursors for our positions
+	// in the blockchain.
+	t.idxDiffPeriod = int(height % winSize)
+	t.windowPeriod = int(height / winSize)
 
 	// We need to figure out how many tickets to buy.
 	// Apply an exponential decay penalty to prices
@@ -375,6 +374,10 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			// Below or equal to the average price. Buy as many
 			// tickets as possible.
 			t.toBuyDiffPeriod = int(float64(couldBuy))
+
+			log.Debugf("The stake difficulty %v was below the penalty "+
+				"cutoff %v; %v many tickets have been queued for purchase",
+				curPrice, avgPrice, t.toBuyDiffPeriod)
 		}
 	}
 

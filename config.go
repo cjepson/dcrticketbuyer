@@ -273,14 +273,6 @@ func loadConfig() (*config, error) {
 		return loadConfigError(err)
 	}
 
-	// The user must set the dcrd and dcrwallet server variables.
-	if cfg.DcrdServ == "" {
-		return loadConfigError(fmt.Errorf("No dcrd RPC server specified"))
-	}
-	if cfg.DcrwServ == "" {
-		return loadConfigError(fmt.Errorf("No dcrwallet RPC server specified"))
-	}
-
 	// Warn about missing config file after the final command line parse
 	// succeeds.  This prevents the warning on help messages and invalid
 	// options.
