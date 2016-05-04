@@ -237,8 +237,12 @@ func loadConfig() (*config, error) {
 	preParser := flags.NewParser(&preCfg, flags.Default)
 	_, err := preParser.Parse()
 	if err != nil {
-		if e, ok := err.(*flags.Error); !ok || e.Type != flags.ErrHelp {
+		e, ok := err.(*flags.Error)
+		if !ok || e.Type != flags.ErrHelp {
 			preParser.WriteHelp(os.Stderr)
+		}
+		if e.Type == flags.ErrHelp {
+			os.Exit(0)
 		}
 		return loadConfigError(err)
 	}
