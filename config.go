@@ -312,7 +312,7 @@ func loadConfig() (*config, error) {
 	// If the user has set a pool address, the pool fees for the
 	// pool can not be zero.
 	if cfg.PoolAddress != "" && cfg.PoolFees == 0.0 {
-		str := "%s: Pool address is set but pool fees are unset or 0.00%"
+		str := "%s: Pool address is set but pool fees are unset or 0.00%%"
 		err := fmt.Errorf(str, "loadConfig")
 		fmt.Fprintln(os.Stderr, err)
 		parser.WriteHelp(os.Stderr)
