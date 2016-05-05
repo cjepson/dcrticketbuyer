@@ -36,7 +36,7 @@ var (
 	defaultWalletRPCKeyFile  = filepath.Join(dcrwalletHomeDir, "rpc.key")
 	defaultWalletRPCCertFile = filepath.Join(dcrwalletHomeDir, "rpc.cert")
 	defaultLogDir            = filepath.Join(curDir, defaultLogDirname)
-	defaultHost              = "127.0.0.1"
+	defaultHost              = "localhost"
 
 	defaultAccountName       = "default"
 	defaultTicketAddress     = ""
