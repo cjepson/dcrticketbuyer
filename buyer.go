@@ -453,16 +453,32 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		return nil
 	}
 
-	// Check our balance and abort if we don't have enough moneys.
-	if (balSpendable.ToCoin() - float64(toBuyForBlock)*nextStakeDiff.ToCoin()) <
-		t.cfg.BalanceToMaintain {
-		log.Tracef("Aborting purchasing of tickets because our balance "+
-			"after buying tickets is estimated to be %v but balance "+
-			"to maintain is set to %v",
-			(balSpendable.ToCoin() - float64(toBuyForBlock)*
-				nextStakeDiff.ToCoin()),
-			t.cfg.BalanceToMaintain)
-		return nil
+	// Check our balance versus the amount of tickets we need to buy.
+	// If there is not enough money, decrement and recheck the balance
+	// to see if fewer tickets may be purchased. Abort if we don't
+	// have enough moneys.
+	notEnough := func(bal dcrutil.Amount, toBuy int, sd dcrutil.Amount) bool {
+		return (bal.ToCoin() - float64(toBuy)*sd.ToCoin()) <
+			t.cfg.BalanceToMaintain
+	}
+	if notEnough(balSpendable, toBuyForBlock, nextStakeDiff) {
+		for notEnough(balSpendable, toBuyForBlock, nextStakeDiff) {
+			if toBuyForBlock == 0 {
+				break
+			}
+
+			toBuyForBlock--
+		}
+
+		if toBuyForBlock == 0 {
+			log.Tracef("Aborting purchasing of tickets because our balance "+
+				"after buying tickets is estimated to be %v but balance "+
+				"to maintain is set to %v",
+				(balSpendable.ToCoin() - float64(toBuyForBlock)*
+					nextStakeDiff.ToCoin()),
+				t.cfg.BalanceToMaintain)
+			return nil
+		}
 	}
 
 	// If an address wasn't passed, create an internal address in
