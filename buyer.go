@@ -34,6 +34,10 @@ var (
 
 	// zeroUint32 is the zero value for a uint32.
 	zeroUint32 = uint32(0)
+
+	// useMedianStr is the string indicating that the median ticket fee
+	// should be used when determining ticket fee.
+	useMedianStr = "median"
 )
 
 // purchaseManager is the main handler of websocket notifications to
@@ -92,10 +96,12 @@ type ticketPurchaser struct {
 	ticketAddress       dcrutil.Address
 	poolAddress         dcrutil.Address
 	firstStart          bool
-	windowPeriod        int // The current window period
-	idxDiffPeriod       int // Relative block index within the difficulty period
-	toBuyDiffPeriod     int // Number to buy in this period
-	purchasedDiffPeriod int // Number already bought in this period
+	windowPeriod        int  // The current window period
+	idxDiffPeriod       int  // Relative block index within the difficulty period
+	toBuyDiffPeriod     int  // Number to buy in this period
+	purchasedDiffPeriod int  // Number already bought in this period
+	maintainMinPrice    bool // Flag for minimum price manipulation
+	useMedian           bool // Flag for using median for ticket fees
 }
 
 // newTicketPurchaser creates a new ticketPurchaser.
@@ -119,13 +125,20 @@ func newTicketPurchaser(cfg *config,
 		}
 	}
 
+	maintainMinPrice := false
+	if cfg.MinPrice > defaultMinPrice {
+		maintainMinPrice = true
+	}
+
 	return &ticketPurchaser{
-		cfg:           cfg,
-		dcrdChainSvr:  dcrdChainSvr,
-		dcrwChainSvr:  dcrwChainSvr,
-		firstStart:    true,
-		ticketAddress: ticketAddress,
-		poolAddress:   poolAddress,
+		cfg:              cfg,
+		dcrdChainSvr:     dcrdChainSvr,
+		dcrwChainSvr:     dcrwChainSvr,
+		firstStart:       true,
+		ticketAddress:    ticketAddress,
+		poolAddress:      poolAddress,
+		maintainMinPrice: maintainMinPrice,
+		useMedian:        cfg.FeeSource == useMedianStr,
 	}, nil
 }
 
@@ -147,12 +160,12 @@ func (p diffPeriodFees) Less(i, j int) bool {
 }
 func (p diffPeriodFees) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
-// findClosestMeanFeeWindows is used when there is not enough block information
+// findClosestFeeWindows is used when there is not enough block information
 // from recent blocks to figure out what to set the user's ticket fees to.
 // Instead, it uses data from the last windowsToConsider many windows and
 // takes an average fee from the closest one.
-func (t *ticketPurchaser) findClosestMeanFeeWindows(difficulty float64) (float64,
-	error) {
+func (t *ticketPurchaser) findClosestFeeWindows(difficulty float64,
+	useMedian bool) (float64, error) {
 	wtcUint32 := uint32(windowsToConsider)
 	info, err := t.dcrdChainSvr.TicketFeeInfo(&zeroUint32, &wtcUint32)
 	if err != nil {
@@ -181,10 +194,17 @@ func (t *ticketPurchaser) findClosestMeanFeeWindows(difficulty float64) (float64
 		windowDiffAmt := dcrutil.Amount(bl.MsgBlock().Header.SBits)
 		windowDiff := windowDiffAmt.ToCoin()
 
+		fee := float64(0.0)
+		if !useMedian {
+			fee = info.FeeInfoWindows[i].Mean
+		} else {
+			fee = info.FeeInfoWindows[i].Median
+		}
+
 		dpf := &diffPeriodFee{
 			difficulty: windowDiff,
 			difference: math.Abs(windowDiff - difficulty),
-			fee:        info.FeeInfoWindows[i].Mean,
+			fee:        fee,
 		}
 		sortable[i] = dpf
 	}
@@ -196,7 +216,7 @@ func (t *ticketPurchaser) findClosestMeanFeeWindows(difficulty float64) (float64
 
 // findMeanTicketFeeBlocks finds the mean of the mean of fees from BlocksToAvg
 // many blocks using the ticketfeeinfo RPC API.
-func (t *ticketPurchaser) findMeanTicketFeeBlocks() (float64, error) {
+func (t *ticketPurchaser) findTicketFeeBlocks(useMedian bool) (float64, error) {
 	btaUint32 := uint32(t.cfg.BlocksToAvg)
 	info, err := t.dcrdChainSvr.TicketFeeInfo(&btaUint32, nil)
 	if err != nil {
@@ -205,7 +225,11 @@ func (t *ticketPurchaser) findMeanTicketFeeBlocks() (float64, error) {
 
 	sum := 0.0
 	for i := range info.FeeInfoBlocks {
-		sum += info.FeeInfoBlocks[i].Mean
+		if !useMedian {
+			sum += info.FeeInfoBlocks[i].Mean
+		} else {
+			sum += info.FeeInfoBlocks[i].Median
+		}
 	}
 
 	return sum / float64(t.cfg.BlocksToAvg), nil
@@ -279,6 +303,7 @@ func (t *ticketPurchaser) ownTicketsInMempool() (int, error) {
 
 // purchase is the main handler for purchasing tickets for the user.
 // TODO Fix off by one bug in purchasing by height.
+// TODO Not make this an inlined pile of crap.
 func (t *ticketPurchaser) purchase(height int32) error {
 	// Just starting up, initialize our purchaser and start
 	// buying. Set the start up regular transaction fee here
@@ -338,6 +363,19 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		t.toBuyDiffPeriod = 0
 		t.purchasedDiffPeriod = 0
 		fillTicketQueue = true
+	}
+
+	// Make sure that our wallet is connected to the daemon and the
+	// wallet is unlocked, otherwise abort.
+	walletInfo, err := t.dcrwChainSvr.WalletInfo()
+	if err != nil {
+		return err
+	}
+	if !walletInfo.DaemonConnected {
+		return fmt.Errorf("Wallet not connected to daemon")
+	}
+	if !walletInfo.Unlocked {
+		return fmt.Errorf("Wallet not unlocked to allow ticket purchases")
 	}
 
 	// Move the respective cursors for our positions
@@ -434,15 +472,17 @@ func (t *ticketPurchaser) purchase(height int32) error {
 
 	// If we still have tickets in the memory pool, don't try
 	// to buy even more tickets.
-	if t.cfg.WaitForTickets {
+	if !t.cfg.DontWaitForTickets {
 		inMP, err := t.ownTicketsInMempool()
 		if err != nil {
 			return err
 		}
 
-		if inMP > 0 {
+		if inMP > t.cfg.MaxInMempool {
 			log.Debugf("Currently waiting for %v tickets to enter the "+
-				"blockchain before buying more tickets", inMP)
+				"blockchain before buying more tickets (in mempool: %v,"+
+				" max allowed in mempool %v)", inMP-t.cfg.MaxInMempool,
+				inMP, t.cfg.MaxInMempool)
 			return nil
 		}
 	}
@@ -450,14 +490,15 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// If might be the case that there weren't enough recent
 	// blocks to average fees from. Use data from the last
 	// window with the closest difficulty.
-	meanFee := 0.0
+	chainFee := 0.0
 	if t.idxDiffPeriod < t.cfg.BlocksToAvg {
-		meanFee, err = t.findClosestMeanFeeWindows(nextStakeDiff.ToCoin())
+		chainFee, err = t.findClosestFeeWindows(nextStakeDiff.ToCoin(),
+			t.useMedian)
 		if err != nil {
 			return err
 		}
 	} else {
-		meanFee, err = t.findMeanTicketFeeBlocks()
+		chainFee, err = t.findTicketFeeBlocks(t.useMedian)
 		if err != nil {
 			return err
 		}
@@ -465,7 +506,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 
 	// Scale the mean fee upwards according to what was asked
 	// for by the user.
-	feeToUse := meanFee * t.cfg.FeeTargetScaling
+	feeToUse := chainFee * t.cfg.FeeTargetScaling
 	if feeToUse > t.cfg.MaxFee {
 		log.Tracef("Scaled fee is %v, but max fee is %v; using max",
 			feeToUse, t.cfg.MaxFee)
@@ -486,7 +527,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	}
 
 	log.Debugf("Mean fee for the last blocks or window period was %v; "+
-		"this was scaled to %v", meanFee, feeToUse)
+		"this was scaled to %v", chainFee, feeToUse)
 
 	// Only the maximum number of tickets at each block
 	// should be purchased, as specified by the user.
@@ -495,8 +536,21 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		toBuyForBlock = t.cfg.MaxPerBlock
 	}
 
+	// Hijack the number to purchase for this block if we have minimum
+	// ticket price manipulation enabled.
+	if t.maintainMinPrice {
+		sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
+		if err != nil {
+			return err
+		}
+
+		if sDiffEsts.Expected < t.cfg.MinPrice {
+			toBuyForBlock = t.cfg.MaxPerBlock
+		}
+	}
+
 	// We've already purchased all the tickets we need to.
-	if toBuyForBlock == 0 {
+	if toBuyForBlock <= 0 {
 		log.Tracef("All tickets have been purchased, aborting further " +
 			"ticket purchases")
 		return nil
