@@ -83,7 +83,7 @@ type config struct {
 	PoolAddress        string  `long:"pooladdress" description:"Address to give pool fees rights to"`
 	PoolFees           float64 `long:"poolfees" description:"The pool fee base rate for a given pool as a percentage (0.01 to 100.00%)"`
 	MaxPrice           float64 `long:"maxprice" description:"Maximum price to pay for a ticket (default: 100.0 Coin)"`
-	MinPrice           float64 `long:"minprice" description:"Attempt to prevent the stake difficulty from going below this value by manipulation (default: 2.0 Coin)"`
+	MinPrice           float64 `long:"minprice" description:"Attempt to prevent the stake difficulty from going below this value by manipulation (default: 0.0 Coin)"`
 	MaxFee             float64 `long:"maxfee" description:"Maximum ticket fee per KB (default: 1.0 Coin/KB)"`
 	MinFee             float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01 Coin/KB)"`
 	FeeSource          string  `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean, default: mean)"`
