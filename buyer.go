@@ -335,6 +335,11 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		}
 	}
 
+	// Move the respective cursors for our positions
+	// in the blockchain.
+	t.idxDiffPeriod = int(height % winSize)
+	t.windowPeriod = int(height / winSize)
+
 	// The general case initialization for this function. It
 	// sets our index in the difficulty period, and then
 	// decides if it needs to fill the queue with tickets to
@@ -377,11 +382,6 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	if !walletInfo.Unlocked {
 		return fmt.Errorf("Wallet not unlocked to allow ticket purchases")
 	}
-
-	// Move the respective cursors for our positions
-	// in the blockchain.
-	t.idxDiffPeriod = int(height % winSize)
-	t.windowPeriod = int(height / winSize)
 
 	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
 	if err != nil {
@@ -431,6 +431,13 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			return err
 		}
 		poolSize := bestBlock.MsgBlock().Header.PoolSize
+
+		// Do not allow zero pool sizes to prevent a possible
+		// panic below.
+		if poolSize == 0 {
+			poolSize += 1
+		}
+
 		avgPricePoolAmt := poolValue / dcrutil.Amount(poolSize)
 		ticketVWAP, err := t.dcrdChainSvr.TicketVWAP(nil, nil)
 		if err != nil {
@@ -546,6 +553,12 @@ func (t *ticketPurchaser) purchase(height int32) error {
 
 		if sDiffEsts.Expected < t.cfg.MinPrice {
 			toBuyForBlock = t.cfg.MaxPerBlock
+
+			log.Debugf("Attempting to manipulate the stake difficulty "+
+				"so that the price does not fall below the set minimum "+
+				"%v (current estimate for next stake difficulty: %v) by "+
+				"purchasing an additional round of tickets",
+				t.cfg.MinPrice, sDiffEsts.Expected)
 		}
 	}
 

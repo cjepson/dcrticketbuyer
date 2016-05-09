@@ -46,7 +46,7 @@ var (
 	defaultFeeSource          = "mean"
 	defaultTxFee              = 0.01
 	defaultMaxPrice           = 100.0
-	defaultMinPrice           = 2.0
+	defaultMinPrice           = 0.0
 	defaultMaxPerBlock        = 3
 	defaultBalanceToMaintain  = 0.0
 	defaultHighPricePenalty   = 1.3
