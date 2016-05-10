@@ -100,6 +100,7 @@ type ticketPurchaser struct {
 	idxDiffPeriod       int  // Relative block index within the difficulty period
 	toBuyDiffPeriod     int  // Number to buy in this period
 	purchasedDiffPeriod int  // Number already bought in this period
+	maintainMaxPrice    bool // Flag for maximum price manipulation
 	maintainMinPrice    bool // Flag for minimum price manipulation
 	useMedian           bool // Flag for using median for ticket fees
 }
@@ -125,8 +126,13 @@ func newTicketPurchaser(cfg *config,
 		}
 	}
 
+	maintainMaxPrice := false
+	if cfg.MaxPriceScale > 0.0 {
+		maintainMaxPrice = true
+	}
+
 	maintainMinPrice := false
-	if cfg.MinPrice > defaultMinPrice {
+	if cfg.MinPriceScale > 0.0 {
 		maintainMinPrice = true
 	}
 
@@ -137,6 +143,7 @@ func newTicketPurchaser(cfg *config,
 		firstStart:       true,
 		ticketAddress:    ticketAddress,
 		poolAddress:      poolAddress,
+		maintainMaxPrice: maintainMaxPrice,
 		maintainMinPrice: maintainMinPrice,
 		useMedian:        cfg.FeeSource == useMedianStr,
 	}, nil
@@ -383,6 +390,45 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		return fmt.Errorf("Wallet not unlocked to allow ticket purchases")
 	}
 
+	// Pull and store relevant data about the blockchain. Calculate a
+	// "reasonable" ticket price by using the VWAP for the last 10 days
+	// (mainnet) combined with the average price of all tickets in the
+	// ticket pool. Scale this according to the configuration parameters
+	// to find minimum and maximum prices for users that are electing to
+	// attempting to manipulate the stake difficulty.
+	// First get the average price of a ticket in
+	// the ticket pool. Then get the VWAP price aside
+	// from the pool price. Calculate an average
+	// price by finding the mean.
+	poolValue, err := t.dcrdChainSvr.GetTicketPoolValue()
+	if err != nil {
+		return err
+	}
+	bestBlockH, err := t.dcrdChainSvr.GetBestBlockHash()
+	if err != nil {
+		return err
+	}
+	bestBlock, err := t.dcrdChainSvr.GetBlock(bestBlockH)
+	if err != nil {
+		return err
+	}
+	poolSize := bestBlock.MsgBlock().Header.PoolSize
+
+	// Do not allow zero pool sizes to prevent a possible
+	// panic below.
+	if poolSize == 0 {
+		poolSize += 1
+	}
+
+	avgPricePoolAmt := poolValue / dcrutil.Amount(poolSize)
+	ticketVWAP, err := t.dcrdChainSvr.TicketVWAP(nil, nil)
+	if err != nil {
+		return err
+	}
+	avgPriceAmt := (ticketVWAP + avgPricePoolAmt) / 2
+	avgPrice := avgPriceAmt.ToCoin()
+	log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
+
 	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
 	if err != nil {
 		return err
@@ -395,17 +441,25 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	if err != nil {
 		return err
 	}
-	maxPriceAmt, err := dcrutil.NewAmount(t.cfg.MaxPrice)
+	maxPriceAbsAmt, err := dcrutil.NewAmount(t.cfg.MaxPriceAbsolute)
 	if err != nil {
 		return err
 	}
-
-	// Disable purchasing if the ticket price is too high.
-	if nextStakeDiff > maxPriceAmt || sDiffEsts.Expected > t.cfg.MaxPrice {
-		log.Tracef("Aborting ticket purchases because the ticket price %v "+
-			"or its next window estimate %v is higher than the maximum "+
-			"price %v", nextStakeDiff, sDiffEsts.Expected, maxPriceAmt)
-		return nil
+	maxPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MaxPriceScale * avgPrice)
+	if err != nil {
+		return err
+	}
+	if t.maintainMaxPrice {
+		log.Tracef("The maximum price to maintain for this round is set to %v",
+			maxPriceScaledAmt)
+	}
+	minPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MinPriceScale * avgPrice)
+	if err != nil {
+		return err
+	}
+	if t.maintainMinPrice {
+		log.Tracef("The minimum price to maintain for this round is set to %v",
+			minPriceScaledAmt)
 	}
 
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
@@ -419,67 +473,70 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// This is the main portion that handles filling up the
 	// queue of tickets to purchase (t.toBuyDiffPeriod).
 	if fillTicketQueue {
-		// First get the average price of a ticket in
-		// the ticket pool. Then get the VWAP price aside
-		// from the pool price. Calculate an average
-		// price by finding the mean.
-		poolValue, err := t.dcrdChainSvr.GetTicketPoolValue()
-		if err != nil {
-			return err
-		}
-		bestBlockH, err := t.dcrdChainSvr.GetBestBlockHash()
-		if err != nil {
-			return err
-		}
-		bestBlock, err := t.dcrdChainSvr.GetBlock(bestBlockH)
-		if err != nil {
-			return err
-		}
-		poolSize := bestBlock.MsgBlock().Header.PoolSize
-
-		// Do not allow zero pool sizes to prevent a possible
-		// panic below.
-		if poolSize == 0 {
-			poolSize += 1
-		}
-
-		avgPricePoolAmt := poolValue / dcrutil.Amount(poolSize)
-		ticketVWAP, err := t.dcrdChainSvr.TicketVWAP(nil, nil)
-		if err != nil {
-			return err
-		}
-		avgPriceAmt := (ticketVWAP + avgPricePoolAmt) / 2
-		avgPrice := avgPriceAmt.ToCoin()
-		log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
-
 		// Calculate how many tickets we could possibly buy
 		// at this difficulty.
 		curPrice := nextStakeDiff
 		couldBuy := math.Floor(balSpendable.ToCoin() / nextStakeDiff.ToCoin())
 
-		// Decay exponentially if the price is above the average
+		// Override the target price being the average price if
+		// the user has elected to attempt to modify the ticket
+		// price.
+		targetPrice := avgPrice
+		if t.cfg.PriceTarget > 0.0 {
+			targetPrice = t.cfg.PriceTarget
+		}
+
+		// The target price can not be above the maximum scaled
+		// price of tickets that the user has elected to maintain.
+		// If it is, set the target to the scaled maximum instead
+		// and warn the user.
+		if t.maintainMaxPrice && targetPrice > maxPriceScaledAmt.ToCoin() {
+			targetPrice = maxPriceScaledAmt.ToCoin()
+			log.Warnf("The target price %v that was set to be maintained "+
+				"was above the allowable scaled maximum of %v, so the "+
+				"scaled maximum is being used as the target",
+				t.cfg.PriceTarget, maxPriceScaledAmt)
+		}
+
+		// Decay exponentially if the price is above the ideal or target
 		// price.
 		// floor(penalty ^ -(abs(ticket price - average ticket price)))
 		// Then multiply by the number of tickets we could possibly
 		// buy.
-		if curPrice.ToCoin() > avgPrice {
+		if curPrice.ToCoin() > targetPrice {
 			toBuy := math.Floor(math.Pow(t.cfg.HighPricePenalty,
-				-(math.Abs(curPrice.ToCoin()-avgPrice))) * couldBuy)
+				-(math.Abs(curPrice.ToCoin()-targetPrice))) * couldBuy)
 			t.toBuyDiffPeriod = int(float64(toBuy))
 
-			log.Debugf("The current price %v is above the average price %v, "+
+			log.Debugf("The current price %v is above the target price %v, "+
 				"so the number of tickets to buy this window was "+
-				"scaled from %v to %v", curPrice, avgPrice, couldBuy,
+				"scaled from %v to %v", curPrice, targetPrice, couldBuy,
 				t.toBuyDiffPeriod)
 		} else {
 			// Below or equal to the average price. Buy as many
 			// tickets as possible.
 			t.toBuyDiffPeriod = int(float64(couldBuy))
 
-			log.Debugf("The stake difficulty %v was below the penalty "+
+			log.Debugf("The stake difficulty %v was below the target penalty "+
 				"cutoff %v; %v many tickets have been queued for purchase",
-				curPrice, avgPrice, t.toBuyDiffPeriod)
+				curPrice, targetPrice, t.toBuyDiffPeriod)
 		}
+	}
+
+	// Disable purchasing if the ticket price is too high based on
+	// the absolute cutoff or if the estimated ticket price is above
+	// our scaled cutoff based on the ideal ticket price.
+	if nextStakeDiff > maxPriceAbsAmt {
+		log.Tracef("Aborting ticket purchases because the ticket price %v "+
+			"is higher than the maximum absolute price %v", nextStakeDiff,
+			maxPriceAbsAmt)
+		return nil
+	}
+	if t.maintainMaxPrice && (sDiffEsts.Expected > maxPriceScaledAmt.ToCoin()) {
+		log.Tracef("Aborting ticket purchases because the ticket price "+
+			"next window estimate %v is higher than the maximum scaled "+
+			"price %v", sDiffEsts.Expected, maxPriceScaledAmt)
+		return nil
 	}
 
 	// If we still have tickets in the memory pool, don't try
@@ -550,15 +607,14 @@ func (t *ticketPurchaser) purchase(height int32) error {
 
 	// Hijack the number to purchase for this block if we have minimum
 	// ticket price manipulation enabled.
-	if t.maintainMinPrice {
-		if sDiffEsts.Expected < t.cfg.MinPrice {
+	if t.maintainMinPrice && toBuyForBlock < t.cfg.MaxPerBlock {
+		if sDiffEsts.Expected < minPriceScaledAmt.ToCoin() {
 			toBuyForBlock = t.cfg.MaxPerBlock
-
 			log.Debugf("Attempting to manipulate the stake difficulty "+
 				"so that the price does not fall below the set minimum "+
 				"%v (current estimate for next stake difficulty: %v) by "+
 				"purchasing an additional round of tickets",
-				t.cfg.MinPrice, sDiffEsts.Expected)
+				minPriceScaledAmt, sDiffEsts.Expected)
 		}
 	}
 
@@ -618,7 +674,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	minConf := 0
 	expiry := int(height) + t.cfg.ExpiryDelta
 	tickets, err := t.dcrwChainSvr.PurchaseTicket(t.cfg.AccountName,
-		maxPriceAmt,
+		maxPriceAbsAmt,
 		&minConf,
 		ticketAddress,
 		&toBuyForBlock,
@@ -640,6 +696,14 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		t.purchasedDiffPeriod)
 	log.Debugf("Tickets remaining to be purchased in this window: %v",
 		t.toBuyDiffPeriod-t.purchasedDiffPeriod)
+
+	balSpendable, err = t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
+		0, "spendable")
+	if err != nil {
+		return err
+	}
+	log.Debugf("Final spendable balance at height %v for account '%s' "+
+		"after ticket purchases: %v", height, t.cfg.AccountName, balSpendable)
 
 	return nil
 }

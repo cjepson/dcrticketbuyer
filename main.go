@@ -24,7 +24,7 @@ func main() {
 	// Parse the configuration file.
 	cfg, err := loadConfig()
 	if err != nil {
-		fmt.Printf("Failed to load wallet config: %s\n", err.Error())
+		fmt.Printf("Failed to load ticketbuyer config: %s\n", err.Error())
 		os.Exit(1)
 	}
 	defer backendLog.Flush()

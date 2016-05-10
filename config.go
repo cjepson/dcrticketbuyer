@@ -45,8 +45,10 @@ var (
 	defaultMinFee             = 0.01
 	defaultFeeSource          = "mean"
 	defaultTxFee              = 0.01
-	defaultMaxPrice           = 100.0
-	defaultMinPrice           = 0.0
+	defaultMaxPriceAbsolute   = 100.0
+	defaultMaxPriceScale      = 2.0
+	defaultMinPriceScale      = 0.7
+	defaultPriceTarget        = 0.0
 	defaultMaxPerBlock        = 3
 	defaultBalanceToMaintain  = 0.0
 	defaultHighPricePenalty   = 1.3
@@ -82,8 +84,10 @@ type config struct {
 	TicketAddress      string  `long:"ticketaddress" description:"Address to give ticket voting rights to"`
 	PoolAddress        string  `long:"pooladdress" description:"Address to give pool fees rights to"`
 	PoolFees           float64 `long:"poolfees" description:"The pool fee base rate for a given pool as a percentage (0.01 to 100.00%)"`
-	MaxPrice           float64 `long:"maxprice" description:"Maximum price to pay for a ticket (default: 100.0 Coin)"`
-	MinPrice           float64 `long:"minprice" description:"Attempt to prevent the stake difficulty from going below this value by manipulation (default: 0.0 Coin)"`
+	MaxPriceAbsolute   float64 `long:"maxpriceabsolute" description:"The absolute maximum price to pay for a ticket (default: 100.0 Coin)"`
+	MaxPriceScale      float64 `long:"maxpricescale" description:"Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation (default: 2.0, 0.0 to disable)"`
+	MinPriceScale      float64 `long:"minpricescale" description:"Attempt to prevent the stake difficulty from going below this multiplier (<1.0) by manipulation (default: 0.7, 0.0 to disable)"`
+	PriceTarget        float64 `long:"pricetarget" description:"A target to try to seek setting the stake price to rather than meeting the average price (default: 0.0, 0.0 to disable)"`
 	MaxFee             float64 `long:"maxfee" description:"Maximum ticket fee per KB (default: 1.0 Coin/KB)"`
 	MinFee             float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01 Coin/KB)"`
 	FeeSource          string  `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean, default: mean)"`
@@ -218,8 +222,10 @@ func loadConfig() (*config, error) {
 		MinFee:             defaultMinFee,
 		FeeSource:          defaultFeeSource,
 		TxFee:              defaultTxFee,
-		MaxPrice:           defaultMaxPrice,
-		MinPrice:           defaultMinPrice,
+		MaxPriceAbsolute:   defaultMaxPriceAbsolute,
+		MaxPriceScale:      defaultMaxPriceScale,
+		MinPriceScale:      defaultMinPriceScale,
+		PriceTarget:        defaultPriceTarget,
 		MaxPerBlock:        defaultMaxPerBlock,
 		BalanceToMaintain:  defaultBalanceToMaintain,
 		HighPricePenalty:   defaultHighPricePenalty,
