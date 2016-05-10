@@ -391,18 +391,23 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	if err != nil {
 		return err
 	}
+	sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
+	if err != nil {
+		return err
+	}
 	maxPriceAmt, err := dcrutil.NewAmount(t.cfg.MaxPrice)
 	if err != nil {
 		return err
 	}
 
 	// Disable purchasing if the ticket price is too high.
-	if nextStakeDiff > maxPriceAmt {
+	if nextStakeDiff > maxPriceAmt || sDiffEsts.Expected > t.cfg.MaxPrice {
 		log.Tracef("Aborting ticket purchases because the ticket price %v "+
-			"is higher than the maximum price %v", nextStakeDiff,
-			maxPriceAmt)
+			"or its next window estimate %v is higher than the maximum "+
+			"price %v", nextStakeDiff, sDiffEsts.Expected, maxPriceAmt)
 		return nil
 	}
+
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
 		0, "spendable")
 	if err != nil {
@@ -546,11 +551,6 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// Hijack the number to purchase for this block if we have minimum
 	// ticket price manipulation enabled.
 	if t.maintainMinPrice {
-		sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
-		if err != nil {
-			return err
-		}
-
 		if sDiffEsts.Expected < t.cfg.MinPrice {
 			toBuyForBlock = t.cfg.MaxPerBlock
 
