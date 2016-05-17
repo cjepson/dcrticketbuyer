@@ -111,7 +111,9 @@ prefer for ticket purchase. For reference, these options are given below.
                             mean, default: mean) (mean)
       --txfee=              Default regular tx fee per KB, for consolidations
                             (default: 0.01 Coin/KB) (0.01)
-      --maxperblock=        Maximum tickets per block (default: 3) (3)
+      --maxperblock=        Maximum tickets per block, with negative numbers 
+                            indicating buy one ticket every 1-in-n blocks (default: 
+                            3)
       --balancetomaintain=  Balance to try to maintain in the wallet
       --highpricepenalty=   The exponential penalty to apply to the number of
                             tickets to purchase above the mean ticket pool price

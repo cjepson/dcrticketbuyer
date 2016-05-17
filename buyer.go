@@ -214,6 +214,22 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		fillTicketQueue = true
 	}
 
+	// Parse the ticket purchase frequency. Positive numbers mean
+	// that many tickets per block. Negative numbers mean to only
+	// purchase one ticket once every abs(num) blocks.
+	maxPerBlock := 0
+	switch {
+	case t.cfg.MaxPerBlock == 0:
+		return nil
+	case t.cfg.MaxPerBlock > 1:
+		maxPerBlock = t.cfg.MaxPerBlock
+	case t.cfg.MaxPerBlock < 0:
+		if int(height)%t.cfg.MaxPerBlock != 0 {
+			return nil
+		}
+		maxPerBlock = 1
+	}
+
 	// Make sure that our wallet is connected to the daemon and the
 	// wallet is unlocked, otherwise abort.
 	walletInfo, err := t.dcrwChainSvr.WalletInfo()
@@ -438,15 +454,15 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// Only the maximum number of tickets at each block
 	// should be purchased, as specified by the user.
 	toBuyForBlock := t.toBuyDiffPeriod - t.purchasedDiffPeriod
-	if toBuyForBlock > t.cfg.MaxPerBlock {
-		toBuyForBlock = t.cfg.MaxPerBlock
+	if toBuyForBlock > maxPerBlock {
+		toBuyForBlock = maxPerBlock
 	}
 
 	// Hijack the number to purchase for this block if we have minimum
 	// ticket price manipulation enabled.
-	if t.maintainMinPrice && toBuyForBlock < t.cfg.MaxPerBlock {
+	if t.maintainMinPrice && toBuyForBlock < maxPerBlock {
 		if sDiffEsts.Expected < minPriceScaledAmt.ToCoin() {
-			toBuyForBlock = t.cfg.MaxPerBlock
+			toBuyForBlock = maxPerBlock
 			log.Debugf("Attempting to manipulate the stake difficulty "+
 				"so that the price does not fall below the set minimum "+
 				"%v (current estimate for next stake difficulty: %v) by "+

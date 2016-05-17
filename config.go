@@ -92,7 +92,7 @@ type config struct {
 	MinFee             float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01 Coin/KB)"`
 	FeeSource          string  `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean, default: mean)"`
 	TxFee              float64 `long:"txfee" description:"Default regular tx fee per KB, for consolidations (default: 0.01 Coin/KB)"`
-	MaxPerBlock        int     `long:"maxperblock" description:"Maximum tickets per block (default: 3)"`
+	MaxPerBlock        int     `long:"maxperblock" description:"Maximum tickets per block, with negative numbers indicating buy one ticket every 1-in-n blocks (default: 3)"`
 	BalanceToMaintain  float64 `long:"balancetomaintain" description:"Balance to try to maintain in the wallet"`
 	HighPricePenalty   float64 `long:"highpricepenalty" description:"The exponential penalty to apply to the number of tickets to purchase above the mean ticket pool price (default: 1.3)"`
 	BlocksToAvg        int     `long:"blockstoavg" description:"Number of blocks to average for fees calculation (default: 11)"`
