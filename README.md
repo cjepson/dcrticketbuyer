@@ -1,8 +1,8 @@
 dcrticketbuyer
 ====
 
-[![Build Status](https://travis-ci.org/cjepson/dcrticketbuyer.png?branch=master)]
-(https://travis-ci.org/cjepson/dcrticketbuyer)
+[![Build Status](https://travis-ci.org/decred/dcrticketbuyer.png?branch=master)]
+(https://travis-ci.org/decred/dcrticketbuyer)
 
 dcrticketbuyer is a smart ticket purchasing bot for the automatic purchase 
 of tickets from a Decred wallet. It uses both the daemon and wallet RPC 
@@ -37,7 +37,7 @@ recommended that `GOPATH` is set to a directory in your home directory such as
 install it:
 
 ```bash
-$ go get -u -v github.com/cjepson/dcrticketbuyer/...
+$ go get -u -v github.com/decred/dcrticketbuyer/...
 ```
 
 - dcrticketbuyer (and utilities) will now be installed in either 
@@ -52,7 +52,7 @@ $ go get -u -v github.com/cjepson/dcrticketbuyer/...
 - Run the following command to update btcd, all dependencies, and install it:
 
 ```bash
-$ go get -u -v github.com/cjepson/dcrticketbuyer/...
+$ go get -u -v github.com/decred/dcrticketbuyer/...
 ```
 
 ## Getting Started
@@ -138,10 +138,26 @@ sample configuration file is give below, with explanations about what the
 software will do.
 
 ```
+# Login information for the daemon and wallet RPCs.
+dcrduser=user
+dcrdpass=pass
+dcrdserv=127.0.0.1:12345
+dcrdcert=path/to/.dcrd
+dcrwuser=user
+dcrwpass=pass
+dcrwserv=127.0.0.1:12346
+dcrwcert=path/to/.dcrwallet
+
 # Enable testnet.
 testnet=true
 
-# Purchase at most 5 tickets per block.
+# The wallet account to use to buy tickets. If unset, 
+# it is the default account.
+accountname=default
+
+# Purchase at most 5 tickets per block. If this is set to 
+# negative numbers, the purchaser purchases 1 ticket every
+# abs(n) blocks.
 maxperblock=5
 
 # Stop buying tickets if the mempool has more than 
@@ -202,14 +218,17 @@ feesource=mean
 # DCR/KB as your ticket fee.
 feetargetscaling=1.05
 
-# Try to leave this much coins remaining in the 
+# Try to leave this many coins remaining in the 
 # wallet.
 balancetomaintain=500.0
 
-# Give ticket voting rights to this address.
+# Give ticket voting rights to this address. Comment 
+# this out to use a local address from the wallet it 
+# is connect to.
 ticketaddress=TsfjLsBv6aKQoLmfPJUn3w6r6AB2JajoMrW
 
-# Send 1.23% pool fees to this address.
+# Send 1.23% pool fees to this address. Comment this out 
+# to disable pool mode.
 pooladdress=TsYxLCKr7qtsDxYaJ32zAQg3rFao6aGAHXh
 poolfees=1.23
 
@@ -236,7 +255,7 @@ $ dcrtickeybuyer -C ticketbuyer.conf
 
 ## Issue Tracker
 
-The [integrated github issue tracker](https://github.com/cjepson/dcrticketbuyer/issues)
+The [integrated github issue tracker](https://github.com/decred/dcrticketbuyer/issues)
 is used for this project.
 
 ## License
