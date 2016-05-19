@@ -1,0 +1,29 @@
+package: github.com/decred/dcrticketbuyer
+import:
+- package: github.com/btcsuite/btclog
+- package: github.com/btcsuite/fastsha256
+- package: github.com/btcsuite/golangcrypto
+  subpackages:
+  - nacl/secretbox
+  - ripemd160
+  - scrypt
+  - ssh/terminal
+- package: github.com/btcsuite/seelog
+- package: github.com/btcsuite/websocket
+- package: github.com/decred/dcrd
+  subpackages:
+  - blockchain
+  - blockchain/stake
+  - chaincfg
+  - chaincfg/chainec
+  - chaincfg/chainhash
+  - dcrjson
+  - txscript
+  - wire
+- package: github.com/decred/dcrrpcclient
+- package: github.com/decred/dcrutil
+  subpackages:
+  - hdkeychain
+- package: github.com/jessevdk/go-flags
+  version: 1679536dcc895411a9f5848d9a0250be7856448c
+ 

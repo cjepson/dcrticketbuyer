@@ -13,7 +13,7 @@ This project is currently under active development and is in an alpha state.
 
 ## Requirements
 
-[Go](http://golang.org) 1.5 or newer.
+[Go](http://golang.org) 1.6 or newer.
 
 ## Installation
 
@@ -33,11 +33,26 @@ NOTE: The `GOROOT` and `GOPATH` above must not be the same path.  It is
 recommended that `GOPATH` is set to a directory in your home directory such as
 `~/goprojects` to avoid write permission issues.
 
-- Run the following command to obtain dcrticketbuyer, all dependencies, and 
+- This project requires the package vendoring tool glide. To install glide, 
+run the following:
+
+```bash
+$ go get -u github.com/Masterminds/glide
+```
+
+**NOTE:** If you are using Go 1.5, you must manually enable the vendor
+experiment by setting the `GO15VENDOREXPERIMENT` environment variable to `1`.
+This step is not required for Go 1.6.
+
+- Run the following commands to obtain dcrticketbuyer, all dependencies, and 
 install it:
 
 ```bash
-$ go get -u -v github.com/decred/dcrticketbuyer/...
+$ cd $GOPATH/src/github.com/decred/
+$ git clone https://github.com/decred/dcrticketbuyer
+$ cd dcrticketbuyer
+$ glide install
+$ go install
 ```
 
 - dcrticketbuyer (and utilities) will now be installed in either 
@@ -49,10 +64,13 @@ $ go get -u -v github.com/decred/dcrticketbuyer/...
 
 #### Linux/BSD/MacOSX/POSIX - Build from Source
 
-- Run the following command to update btcd, all dependencies, and install it:
+- Run the following commands to update dcrticketbuyer, all dependencies, and 
+install it:
 
 ```bash
-$ go get -u -v github.com/decred/dcrticketbuyer/...
+$ cd $GOPATH/src/github.com/decred/dcrticketbuyer
+$ git pull origin master && glide install
+$ go install
 ```
 
 ## Getting Started
@@ -201,6 +219,10 @@ pricetarget=0.0
 
 # The maximum allowable fee in a competitive market 
 # for tickets is 1.00 DCR/KB.
+# Note that by default, the maximum the wallet will 
+# allow you to set is 1.00 DCR/KB. You can allow 
+# higher fees by turning on the --allowhighfees flag 
+# when starting wallet.
 maxfee=1.00
 
 # The minimum allowable fee in a competitive market 
@@ -232,8 +254,10 @@ ticketaddress=TsfjLsBv6aKQoLmfPJUn3w6r6AB2JajoMrW
 pooladdress=TsYxLCKr7qtsDxYaJ32zAQg3rFao6aGAHXh
 poolfees=1.23
 
-# Set the transaction fees to 0.00001 DCR/KB.
-txfee=0.00001
+# Set the transaction fees to 0.01 DCR/KB. This fee is 
+# used when generating consolidations of smaller UTXOs 
+# that are immediately consumed by a ticket purchase.
+txfee=0.01
 
 # All purchased tickets will expire in 16 blocks 
 # if they fail to exit the mempool and enter the 
@@ -246,6 +270,13 @@ The program may then be run with
 ```bash
 $ dcrtickeybuyer -C ticketbuyer.conf
 ```
+
+To enable more explicit output, set the debug level 
+for the ticket buyer to DEBUG or TRACE:
+```bash
+$ dcrtickeybuyer -C ticketbuyer.conf -d TKBY=debug
+```
+
 
 ## IRC
 
