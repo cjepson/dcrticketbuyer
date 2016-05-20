@@ -27,6 +27,11 @@ const (
 var curDir, _ = os.Getwd()
 var activeNet = &netparams.MainNetParams
 
+// csvPath is the default path for web server CSV files to be
+// held in and for the JavaScript libraries. It is set to whatever
+// HttpUIPath is after loading the configuration.
+var csvPath = ""
+
 var (
 	dcrdHomeDir              = dcrutil.AppDataDir("dcrd", false)
 	dcrwalletHomeDir         = dcrutil.AppDataDir("dcrwallet", false)
@@ -37,6 +42,9 @@ var (
 	defaultWalletRPCCertFile = filepath.Join(dcrwalletHomeDir, "rpc.cert")
 	defaultLogDir            = filepath.Join(curDir, defaultLogDirname)
 	defaultHost              = "localhost"
+	defaultHttpServerBind    = ""
+	defaultHttpServerPort    = 0
+	defaultHttpUIPath        = "webui/"
 
 	defaultAccountName        = "default"
 	defaultTicketAddress      = ""
@@ -67,6 +75,9 @@ type config struct {
 	SimNet      bool   `long:"simnet" description:"Use the simulation test network (default mainnet)"`
 	DebugLevel  string `short:"d" long:"debuglevel" description:"Logging level {trace, debug, info, warn, error, critical}"`
 	LogDir      string `long:"logdir" description:"Directory to log output"`
+	HttpSvrBind string `long:"httpsvrbind" description:"IP to bind for the HTTP server that tracks ticket purchase metrics (default: \"\" or localhost)"`
+	HttpSvrPort int    `long:"httpsvrport" description:"Server port for the HTTP server that tracks ticket purchase metrics; disabled if 0 (default: 0)"`
+	HttpUIPath  string `long:"httpuipath" description:"Path for the data and JavaScript libraries for displaying/storing purchase metrics (default: \"webui/\")"`
 
 	// RPC client options
 	DcrdUser         string `long:"dcrduser" description:"Daemon RPC user name"`
@@ -213,6 +224,9 @@ func loadConfig() (*config, error) {
 		DebugLevel:         defaultLogLevel,
 		ConfigFile:         defaultConfigFile,
 		LogDir:             defaultLogDir,
+		HttpSvrBind:        defaultHttpServerBind,
+		HttpSvrPort:        defaultHttpServerPort,
+		HttpUIPath:         defaultHttpUIPath,
 		DcrdCert:           defaultDaemonRPCCertFile,
 		DcrwCert:           defaultWalletRPCCertFile,
 		AccountName:        defaultAccountName,
@@ -339,6 +353,15 @@ func loadConfig() (*config, error) {
 		cfg.DcrwServ = defaultHost + ":" + activeNet.RPCServerPort
 	}
 
+	// The HTTP server port can not be beyond a uint16's size in value.
+	if cfg.HttpSvrPort > 0xffff {
+		str := "%s: Invalid HTTP port number for HTTP server"
+		err := fmt.Errorf(str, "loadConfig")
+		fmt.Fprintln(os.Stderr, err)
+		parser.WriteHelp(os.Stderr)
+		return loadConfigError(err)
+	}
+
 	// Append the network type to the log directory so it is "namespaced"
 	// per network.
 	cfg.LogDir = cleanAndExpandPath(cfg.LogDir)
@@ -361,6 +384,8 @@ func loadConfig() (*config, error) {
 		parser.WriteHelp(os.Stderr)
 		return loadConfigError(err)
 	}
+
+	csvPath = cfg.HttpUIPath
 
 	return &cfg, nil
 }

@@ -20,7 +20,8 @@ import:
   - dcrjson
   - txscript
   - wire
-- package: github.com/decred/dcrrpcclient
+- package: github.com/cjepson/dcrrpcclient
+  version: a9c709f2912cfc92c891ac72b4e4e4d1ed9a9159
 - package: github.com/decred/dcrutil
   subpackages:
   - hdkeychain

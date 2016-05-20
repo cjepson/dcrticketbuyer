@@ -1,5 +1,5 @@
-hash: e18842d7bc60d1bcd6dc7ba673e776476e650a8323218050a055317719b0189b
-updated: 2016-05-18T20:40:48.589275042-04:00
+hash: 77742f189992124678a2c3dae0c8b56d4e1e2860abea540cc36f985a2afe3e56
+updated: 2016-05-19T18:51:30.85970951-04:00
 imports:
 - name: github.com/btcsuite/btclog
   version: f96df2375f37300305f329b8e5258764b4f19a7f
@@ -22,6 +22,8 @@ imports:
   version: 313961b101eb55f65ae0f03ddd4e322731763b6c
 - name: github.com/btcsuite/websocket
   version: 31079b6807923eb23992c421b114992b95131b55
+- name: github.com/cjepson/dcrrpcclient
+  version: a9c709f2912cfc92c891ac72b4e4e4d1ed9a9159
 - name: github.com/decred/blake256
   version: a840e32d7c31fe2e0218607334cb120a683951a4
 - name: github.com/decred/dcrd
