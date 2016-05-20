@@ -1,5 +1,5 @@
-hash: e18842d7bc60d1bcd6dc7ba673e776476e650a8323218050a055317719b0189b
-updated: 2016-05-18T20:40:48.589275042-04:00
+hash: 29b2c301a3fb1c93081832fa63431257b9ecbf8e04ad4949c8f21e5b37bc84c4
+updated: 2016-05-23T14:16:58.106719441-04:00
 imports:
 - name: github.com/btcsuite/btclog
   version: f96df2375f37300305f329b8e5258764b4f19a7f
@@ -25,7 +25,7 @@ imports:
 - name: github.com/decred/blake256
   version: a840e32d7c31fe2e0218607334cb120a683951a4
 - name: github.com/decred/dcrd
-  version: b3b20f55bb196c5d1766b3a1d6ed2dae3aa90a93
+  version: e8e81fe490de38d195bc5996b0c533c25401c53e
   subpackages:
   - blockchain
   - blockchain/stake
@@ -39,7 +39,7 @@ imports:
   - dcrec/secp256k1
   - dcrec/secp256k1/schnorr
 - name: github.com/decred/dcrrpcclient
-  version: e625cc131dc06129f56e0d472061c3e378ada396
+  version: 7df7e9027e1dbc0fa3f9f9adc83acc7bf0f1144a
 - name: github.com/decred/dcrutil
   version: 74563ea520b1215b9c10f96507b7a9984894c0b5
   subpackages:

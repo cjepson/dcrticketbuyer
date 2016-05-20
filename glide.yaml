@@ -11,6 +11,7 @@ import:
 - package: github.com/btcsuite/seelog
 - package: github.com/btcsuite/websocket
 - package: github.com/decred/dcrd
+  version: e8e81fe490de38d195bc5996b0c533c25401c53e
   subpackages:
   - blockchain
   - blockchain/stake
@@ -21,6 +22,7 @@ import:
   - txscript
   - wire
 - package: github.com/decred/dcrrpcclient
+  version: 7df7e9027e1dbc0fa3f9f9adc83acc7bf0f1144a
 - package: github.com/decred/dcrutil
   subpackages:
   - hdkeychain

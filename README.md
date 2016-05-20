@@ -90,6 +90,13 @@ prefer for ticket purchase. For reference, these options are given below.
                             critical} (info)
       --logdir=             Directory to log output
                             (../dcrticketbuyer/logs)
+      --httpsvrbind=        IP to bind for the HTTP server that tracks ticket
+                            purchase metrics (default: "" or localhost)
+      --httpsvrport=        Server port for the HTTP server that tracks ticket
+                            purchase metrics; disabled if 0 (default: 0)
+      --httpuipath=         Path for the data and JavaScript libraries for
+                            displaying/storing purchase metrics (default: "webui/")
+                            (webui/)
       --dcrduser=           Daemon RPC user name
       --dcrdpass=           Daemon RPC password
       --dcrdserv=           Hostname/IP and port of dcrd RPC server to connect to
@@ -153,22 +160,43 @@ prefer for ticket purchase. For reference, these options are given below.
 
 It is recommended to use a configuration file to fine tune the software. A 
 sample configuration file is give below, with explanations about what the 
-software will do.
+software will do. This is also found in the reposity itself as 
+"ticketbuyer-example.conf".
 
 ```
+#########################################
+### Basic Connectivity and Monitoring ###
+#########################################
 # Login information for the daemon and wallet RPCs.
 dcrduser=user
 dcrdpass=pass
-dcrdserv=127.0.0.1:12345
+dcrdserv=127.0.0.1:19109
 dcrdcert=path/to/.dcrd
 dcrwuser=user
 dcrwpass=pass
-dcrwserv=127.0.0.1:12346
+dcrwserv=127.0.0.1:19110
 dcrwcert=path/to/.dcrwallet
+
+# Enable the HTTP monitoring server bound to localhost,
+# port 7770. Access in browser with:
+#   http://localhost:7770
+# The optional parameter httpsvrbind allows you to 
+# bind the server externally or to another IP.
+httpsvrport=7770
+
+# The path to store monitoring logs in along with all 
+# the libraries/data for the HTTP server. This folder 
+# must constain the JavaScript libraries d3 and dimple 
+# for this to function correctly.
+# By default, the path is "webui/" in PWD.
+httpuipath=webui/
 
 # Enable testnet.
 testnet=true
 
+##################################
+### Basic Wallet Configuration ###
+##################################
 # The wallet account to use to buy tickets. If unset, 
 # it is the default account.
 accountname=default
@@ -185,6 +213,28 @@ maxinmempool=40
 # Never spend more than 100.0 DCR on a ticket.
 maxpriceabsolute=100.0
 
+# Try to leave this many coins remaining in the 
+# wallet.
+balancetomaintain=500.0
+
+# All purchased tickets will expire in 16 blocks 
+# if they fail to exit the mempool and enter the 
+# blockchain.
+expirydelta=16
+
+# Give ticket voting rights to this address. Comment 
+# this out to use a local address from the wallet it 
+# is connect to.
+ticketaddress=TsfjLsBv6aKQoLmfPJUn3w6r6AB2JajoMrW
+
+# Send 1.23% pool fees to this address. Comment this out 
+# to disable pool mode.
+pooladdress=TsYxLCKr7qtsDxYaJ32zAQg3rFao6aGAHXh
+poolfees=1.23
+
+########################################
+### Price Manipulation and Targeting ###
+########################################
 # Do not purchase tickets if it will move the difficulty 
 # above this multiplier for the 'ideal' ticket price. 
 # e.g. if the ideal ticket price is 15.0 DCR, the program 
@@ -217,6 +267,9 @@ minpricescale=0.7
 # the average price.
 pricetarget=0.0
 
+###################################
+### Ticket and Transaction Fees ###
+###################################
 # The maximum allowable fee in a competitive market 
 # for tickets is 1.00 DCR/KB.
 # Note that by default, the maximum the wallet will 
@@ -240,29 +293,18 @@ feesource=mean
 # DCR/KB as your ticket fee.
 feetargetscaling=1.05
 
-# Try to leave this many coins remaining in the 
-# wallet.
-balancetomaintain=500.0
-
-# Give ticket voting rights to this address. Comment 
-# this out to use a local address from the wallet it 
-# is connect to.
-ticketaddress=TsfjLsBv6aKQoLmfPJUn3w6r6AB2JajoMrW
-
-# Send 1.23% pool fees to this address. Comment this out 
-# to disable pool mode.
-pooladdress=TsYxLCKr7qtsDxYaJ32zAQg3rFao6aGAHXh
-poolfees=1.23
-
 # Set the transaction fees to 0.01 DCR/KB. This fee is 
 # used when generating consolidations of smaller UTXOs 
 # that are immediately consumed by a ticket purchase.
 txfee=0.01
 
-# All purchased tickets will expire in 16 blocks 
-# if they fail to exit the mempool and enter the 
-# blockchain.
-expirydelta=16
+# The number of previous blocks to average to calculate 
+# what fees to use. If there are not enough blocks in 
+# this window yet, the software will scan old difficulty 
+# periods for the one with the price closest to the 
+# current price and use the average fees from that 
+# period for deciding what fee to use.
+blockstoavg=11
 ```
 
 The program may then be run with
@@ -272,7 +314,7 @@ $ dcrtickeybuyer -C ticketbuyer.conf
 ```
 
 To enable more explicit output, set the debug level 
-for the ticket buyer to DEBUG or TRACE:
+for the ticket buyer subsystem to debug or trace:
 ```bash
 $ dcrtickeybuyer -C ticketbuyer.conf -d TKBY=debug
 ```

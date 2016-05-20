@@ -9,6 +9,16 @@ import (
 	"github.com/decred/dcrutil"
 )
 
+var (
+	// stakeInfoReqTries is the maximum number of times to try
+	// GetStakeInfo before failing.
+	stakeInfoReqTries = 20
+
+	// stakeInfoReqTryDelay is the time in seconds to wait before
+	// doing another GetStakeInfo request.
+	stakeInfoReqTryDelay = time.Second * 1
+)
+
 // ownTicketsInMempool finds all the tickets owned by the user in the
 // daemon mempool. It searches for the ticket address if it is specified,
 // and otherwise uses getstakeinfo to determine this number.
@@ -69,4 +79,15 @@ func (t *ticketPurchaser) ownTicketsInMempool() (int, error) {
 	}
 
 	return int(curStakeInfo.OwnMempoolTix), nil
+}
+
+// allTicketsInMempool fetches the number of tickets currently in the memory
+// pool.
+func (t *ticketPurchaser) allTicketsInMempool() (int, error) {
+	tfi, err := t.dcrdChainSvr.TicketFeeInfo(&zeroUint32, &zeroUint32)
+	if err != nil {
+		return 0, err
+	}
+
+	return int(tfi.FeeInfoMempool.Number), nil
 }
