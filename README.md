@@ -314,7 +314,7 @@ $ dcrtickeybuyer -C ticketbuyer.conf
 ```
 
 To enable more explicit output, set the debug level 
-for the ticket buyer to DEBUG or TRACE:
+for the ticket buyer subsystem to debug or trace:
 ```bash
 $ dcrtickeybuyer -C ticketbuyer.conf -d TKBY=debug
 ```
