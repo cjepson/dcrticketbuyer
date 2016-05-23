@@ -160,7 +160,8 @@ prefer for ticket purchase. For reference, these options are given below.
 
 It is recommended to use a configuration file to fine tune the software. A 
 sample configuration file is give below, with explanations about what the 
-software will do.
+software will do. This is also found in the reposity itself as 
+"ticketbuyer-example.conf".
 
 ```
 #########################################
