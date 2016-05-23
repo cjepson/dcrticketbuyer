@@ -299,7 +299,10 @@ func addDimpleChart(chartName, title, dataLoc, xItem, yItem,
 		
 	    var CHART_NAME = new dimple.chart(SVG_NAME, data);
 	    CHART_NAME.setBounds(60, 60, 600, 305);
-	    CHART_NAME.addCategoryAxis("x", "X_ITEM");
+	    var x = CHART_NAME.addCategoryAxis("x", "X_ITEM");
+		x.addOrderRule(function(a, b) {
+			return d3.descending(a.Height, b.Height);
+		});
 	    CHART_NAME.addMeasureAxis("y", "Y_ITEM");
 	    var s = CHART_NAME.addSeries("IDENTIFIER", dimple.plot.line);
 		USE_STEP
