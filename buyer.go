@@ -421,7 +421,8 @@ func (t *ticketPurchaser) purchase(height int32) error {
 			maxPriceAbsAmt)
 		return nil
 	}
-	if t.maintainMaxPrice && (sDiffEsts.Expected > maxPriceScaledAmt.ToCoin()) {
+	if t.maintainMaxPrice && (sDiffEsts.Expected > maxPriceScaledAmt.ToCoin()) &&
+		maxPriceScaledAmt != 0 {
 		log.Tracef("Aborting ticket purchases because the ticket price "+
 			"next window estimate %v is higher than the maximum scaled "+
 			"price %v", sDiffEsts.Expected, maxPriceScaledAmt)

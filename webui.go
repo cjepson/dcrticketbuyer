@@ -301,7 +301,7 @@ func addDimpleChart(chartName, title, dataLoc, xItem, yItem,
 	    CHART_NAME.setBounds(60, 60, 600, 305);
 	    var x = CHART_NAME.addCategoryAxis("x", "X_ITEM");
 		x.addOrderRule(function(a, b) {
-			return d3.descending(a.Height, b.Height);
+			return d3.ascending(a.Height, b.Height);
 		});
 	    CHART_NAME.addMeasureAxis("y", "Y_ITEM");
 	    var s = CHART_NAME.addSeries("IDENTIFIER", dimple.plot.line);
