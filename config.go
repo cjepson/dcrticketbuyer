@@ -42,7 +42,7 @@ var (
 	defaultWalletRPCCertFile = filepath.Join(dcrwalletHomeDir, "rpc.cert")
 	defaultLogDir            = filepath.Join(curDir, defaultLogDirname)
 	defaultHost              = "localhost"
-	defaultHttpServerBind    = ""
+	defaultHttpServerBind    = "localhost"
 	defaultHttpServerPort    = 0
 	defaultHttpUIPath        = "webui/"
 
