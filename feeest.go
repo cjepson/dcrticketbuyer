@@ -101,6 +101,11 @@ func (t *ticketPurchaser) findClosestFeeWindows(difficulty float64,
 
 	sort.Sort(sortable)
 
+	// No data available, prevent a panic.
+	if len(sortable) == 0 {
+		return 0, nil
+	}
+
 	return sortable[0].fee, nil
 }
 
