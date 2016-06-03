@@ -156,8 +156,22 @@ func main() {
 		cfg.DcrwServ, cfg.DcrwUser, cfg.DcrwCert)
 	dcrwClient, err := dcrrpcclient.New(connCfgWallet, nil)
 	if err != nil {
-		fmt.Printf("Failed to start dcrd rpcclient: %s\n", err.Error())
+		fmt.Printf("Failed to start dcrw rpcclient: %s\n", err.Error())
 		os.Exit(1)
+	}
+
+	wi, err := dcrwClient.WalletInfo()
+	if err != nil {
+		fmt.Printf("Failed to get WalletInfo on start: %s\n", err.Error())
+		os.Exit(1)
+	}
+	if !wi.DaemonConnected {
+		log.Warnf("Wallet was not connected to a daemon at start up! " +
+			"Please ensure wallet has proper connectivity.")
+	}
+	if !wi.Unlocked {
+		log.Warnf("Wallet is not unlocked! You will need to unlock " +
+			"wallet for tickets to be purchased.")
 	}
 
 	err = syncGlobalsStartup(dcrdClient, dcrwClient, cfg)
