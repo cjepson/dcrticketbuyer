@@ -12,6 +12,13 @@ import (
 	"github.com/decred/dcrutil"
 )
 
+const (
+	// windowsToConsider is the number of windows to consider
+	// when there is not enough block information to determine
+	// what the best fee should be.
+	windowsToConsider = 20
+)
+
 // diffPeriodFee defines some statistics about a difficulty fee period
 // compared to the current difficulty period.
 type diffPeriodFee struct {
@@ -50,8 +57,15 @@ func (t *ticketPurchaser) findClosestFeeWindows(difficulty float64,
 	// Fetch all the mean fees and window difficulties. Calculate
 	// the difference from the current window and sort, then use
 	// the mean fee from the period that has the closest difficulty.
-	sortable := make(diffPeriodFees, len(info.FeeInfoWindows))
+	var sortable diffPeriodFees
 	for i := range info.FeeInfoWindows {
+		// Skip the first window if it's not full.
+		span := info.FeeInfoWindows[i].EndHeight -
+			info.FeeInfoWindows[i].StartHeight
+		if i == 0 && int64(span) < activeNet.StakeDiffWindowSize {
+			continue
+		}
+
 		startHeight := int64(info.FeeInfoWindows[i].StartHeight)
 		blH, err := t.dcrdChainSvr.GetBlockHash(startHeight)
 		if err != nil {
@@ -71,12 +85,18 @@ func (t *ticketPurchaser) findClosestFeeWindows(difficulty float64,
 			fee = info.FeeInfoWindows[i].Median
 		}
 
+		// Skip all windows for which fee information does not exist
+		// because tickets were not purchased.
+		if fee == 0.0 {
+			continue
+		}
+
 		dpf := &diffPeriodFee{
 			difficulty: windowDiff,
 			difference: math.Abs(windowDiff - difficulty),
 			fee:        fee,
 		}
-		sortable[i] = dpf
+		sortable = append(sortable, dpf)
 	}
 
 	sort.Sort(sortable)

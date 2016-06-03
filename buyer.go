@@ -13,13 +13,6 @@ import (
 	"github.com/decred/dcrutil"
 )
 
-const (
-	// windowsToConsider is the number of windows to consider
-	// when there is not enough block information to determine
-	// what the best fee should be.
-	windowsToConsider = 10
-)
-
 var (
 	// zeroUint32 is the zero value for a uint32.
 	zeroUint32 = uint32(0)
