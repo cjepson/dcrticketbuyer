@@ -130,6 +130,10 @@ prefer for ticket purchase. For reference, these options are given below.
       --pricetarget=        A target to try to seek setting the stake price to
                             rather than meeting the average price (default: 0.0,
                             0.0 to disable)
+      --avgpricemode=       The mode to use for calculating the average price if
+                            pricetarget is disabled (default: dual)
+      --avgpricevwapdelta=  The number of blocks to use from the current block to
+                            calculate the VWAP (default: 2880)
       --maxfee=             Maximum ticket fee per KB (default: 1.0 Coin/KB) (1)
       --minfee=             Minimum ticket fee per KB (default: 0.01 Coin/KB) (0.01)
       --feesource=          The fee source to use for ticket fee per KB (median or
@@ -266,6 +270,21 @@ minpricescale=0.7
 # you have enough DCR to be able to strongly move 
 # the average price.
 pricetarget=0.0
+
+# Determine the average price of the ticket using any 
+# of the following methods:
+#   pool: use the average price in the ticket pool
+#   vwap: use the volume weighted average price
+#   dual: use the average of both the pool and VWAP
+# 
+# Default: vwap
+avgpricemode=vwap
+
+# The number of blocks from the current chain tip 
+# to use in the calculation of the ticket volume 
+# weighted average price. The default is 2880, or 
+# 10 days on mainnet.
+avgpricevwapdelta=2880
 
 ###################################
 ### Ticket and Transaction Fees ###

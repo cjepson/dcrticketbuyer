@@ -17,9 +17,26 @@ var (
 	// zeroUint32 is the zero value for a uint32.
 	zeroUint32 = uint32(0)
 
+	// useMeanStr is the string indicating that the mean ticket fee
+	// should be used when determining ticket fee.
+	useMeanStr = "mean"
+
 	// useMedianStr is the string indicating that the median ticket fee
 	// should be used when determining ticket fee.
 	useMedianStr = "median"
+
+	// useVWAPStr is the string indicating that the volume
+	// weighted average price should be used as the price target.
+	useVWAPStr = "vwap"
+
+	// usePoolPriceStr is the string indicating that the ticket pool
+	// price should be used as the price target.
+	usePoolPriceStr = "pool"
+
+	// useDualPriceStr is the string indicating that a combination of the
+	// ticket pool price and the ticket VWAP should be used as the
+	// price target.
+	useDualPriceStr = "dual"
 )
 
 // purchaseManager is the main handler of websocket notifications to
@@ -79,13 +96,14 @@ type ticketPurchaser struct {
 	ticketAddress       dcrutil.Address
 	poolAddress         dcrutil.Address
 	firstStart          bool
-	windowPeriod        int  // The current window period
-	idxDiffPeriod       int  // Relative block index within the difficulty period
-	toBuyDiffPeriod     int  // Number to buy in this period
-	purchasedDiffPeriod int  // Number already bought in this period
-	maintainMaxPrice    bool // Flag for maximum price manipulation
-	maintainMinPrice    bool // Flag for minimum price manipulation
-	useMedian           bool // Flag for using median for ticket fees
+	windowPeriod        int          // The current window period
+	idxDiffPeriod       int          // Relative block index within the difficulty period
+	toBuyDiffPeriod     int          // Number to buy in this period
+	purchasedDiffPeriod int          // Number already bought in this period
+	maintainMaxPrice    bool         // Flag for maximum price manipulation
+	maintainMinPrice    bool         // Flag for minimum price manipulation
+	useMedian           bool         // Flag for using median for ticket fees
+	priceMode           avgPriceMode // Price mode to use to calc average price
 }
 
 // newTicketPurchaser creates a new ticketPurchaser.
@@ -119,6 +137,14 @@ func newTicketPurchaser(cfg *config,
 		maintainMinPrice = true
 	}
 
+	priceMode := avgPriceMode(AvgPriceVWAPMode)
+	switch cfg.AvgPriceMode {
+	case usePoolPriceStr:
+		priceMode = AvgPriceVWAPMode
+	case useDualPriceStr:
+		priceMode = AvgPriceDualMode
+	}
+
 	return &ticketPurchaser{
 		cfg:              cfg,
 		dcrdChainSvr:     dcrdChainSvr,
@@ -129,6 +155,7 @@ func newTicketPurchaser(cfg *config,
 		maintainMaxPrice: maintainMaxPrice,
 		maintainMinPrice: maintainMinPrice,
 		useMedian:        cfg.FeeSource == useMedianStr,
+		priceMode:        priceMode,
 	}, nil
 }
 
@@ -264,42 +291,11 @@ func (t *ticketPurchaser) purchase(height int32) error {
 		return fmt.Errorf("Wallet not unlocked to allow ticket purchases")
 	}
 
-	// Pull and store relevant data about the blockchain. Calculate a
-	// "reasonable" ticket price by using the VWAP for the last 10 days
-	// (mainnet) combined with the average price of all tickets in the
-	// ticket pool. Scale this according to the configuration parameters
-	// to find minimum and maximum prices for users that are electing to
-	// attempting to manipulate the stake difficulty.
-	// First get the average price of a ticket in
-	// the ticket pool. Then get the VWAP price aside
-	// from the pool price. Calculate an average
-	// price by finding the mean.
-	poolValue, err := t.dcrdChainSvr.GetTicketPoolValue()
+	avgPriceAmt, err := t.calcAverageTicketPrice(height)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failed to calculate average ticket price amount: %s",
+			err.Error())
 	}
-	bestBlockH, err := t.dcrdChainSvr.GetBestBlockHash()
-	if err != nil {
-		return err
-	}
-	bestBlock, err := t.dcrdChainSvr.GetBlock(bestBlockH)
-	if err != nil {
-		return err
-	}
-	poolSize := bestBlock.MsgBlock().Header.PoolSize
-
-	// Do not allow zero pool sizes to prevent a possible
-	// panic below.
-	if poolSize == 0 {
-		poolSize += 1
-	}
-
-	avgPricePoolAmt := poolValue / dcrutil.Amount(poolSize)
-	ticketVWAP, err := t.dcrdChainSvr.TicketVWAP(nil, nil)
-	if err != nil {
-		return err
-	}
-	avgPriceAmt := (ticketVWAP + avgPricePoolAmt) / 2
 	avgPrice := avgPriceAmt.ToCoin()
 	log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
 	csvData.tpAverage = avgPrice
@@ -321,6 +317,9 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	}
 	csvData.tpNext = sDiffEsts.Expected
 
+	// Scale the average price according to the configuration parameters
+	// to find minimum and maximum prices for users that are electing to
+	// attempting to manipulate the stake difficulty.
 	maxPriceAbsAmt, err := dcrutil.NewAmount(t.cfg.MaxPriceAbsolute)
 	if err != nil {
 		return err

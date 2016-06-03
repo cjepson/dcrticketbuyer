@@ -73,6 +73,9 @@ func (t *ticketPurchaser) ownTicketsInMempool() (int, error) {
 			time.Sleep(stakeInfoReqTryDelay)
 			continue
 		}
+		if err == nil {
+			break
+		}
 	}
 	if err != nil {
 		return 0, err

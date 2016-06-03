@@ -57,6 +57,8 @@ var (
 	defaultMaxPriceScale      = 2.0
 	defaultMinPriceScale      = 0.7
 	defaultPriceTarget        = 0.0
+	defaultAvgPriceMode       = "vwap"
+	defaultAvgVWAPPriceDelta  = 2880
 	defaultMaxPerBlock        = 3
 	defaultBalanceToMaintain  = 0.0
 	defaultHighPricePenalty   = 1.3
@@ -99,6 +101,8 @@ type config struct {
 	MaxPriceScale      float64 `long:"maxpricescale" description:"Attempt to prevent the stake difficulty from going above this multiplier (>1.0) by manipulation (default: 2.0, 0.0 to disable)"`
 	MinPriceScale      float64 `long:"minpricescale" description:"Attempt to prevent the stake difficulty from going below this multiplier (<1.0) by manipulation (default: 0.7, 0.0 to disable)"`
 	PriceTarget        float64 `long:"pricetarget" description:"A target to try to seek setting the stake price to rather than meeting the average price (default: 0.0, 0.0 to disable)"`
+	AvgPriceMode       string  `long:"avgpricemode" description:"The mode to use for calculating the average price if pricetarget is disabled (default: dual)"`
+	AvgPriceVWAPDelta  int     `long:"avgpricevwapdelta" description:"The number of blocks to use from the current block to calculate the VWAP (default: 2880)"`
 	MaxFee             float64 `long:"maxfee" description:"Maximum ticket fee per KB (default: 1.0 Coin/KB)"`
 	MinFee             float64 `long:"minfee" description:"Minimum ticket fee per KB (default: 0.01 Coin/KB)"`
 	FeeSource          string  `long:"feesource" description:"The fee source to use for ticket fee per KB (median or mean, default: mean)"`
@@ -240,6 +244,8 @@ func loadConfig() (*config, error) {
 		MaxPriceScale:      defaultMaxPriceScale,
 		MinPriceScale:      defaultMinPriceScale,
 		PriceTarget:        defaultPriceTarget,
+		AvgPriceMode:       defaultAvgPriceMode,
+		AvgPriceVWAPDelta:  defaultAvgVWAPPriceDelta,
 		MaxPerBlock:        defaultMaxPerBlock,
 		BalanceToMaintain:  defaultBalanceToMaintain,
 		HighPricePenalty:   defaultHighPricePenalty,
@@ -357,6 +363,31 @@ func loadConfig() (*config, error) {
 	if cfg.HttpSvrPort > 0xffff {
 		str := "%s: Invalid HTTP port number for HTTP server"
 		err := fmt.Errorf(str, "loadConfig")
+		fmt.Fprintln(os.Stderr, err)
+		parser.WriteHelp(os.Stderr)
+		return loadConfigError(err)
+	}
+
+	// Make sure the fee source type given is valid.
+	switch cfg.FeeSource {
+	case useMeanStr:
+	case useMedianStr:
+	default:
+		str := "%s: Invalid fee source '%s'"
+		err := fmt.Errorf(str, "loadConfig", cfg.FeeSource)
+		fmt.Fprintln(os.Stderr, err)
+		parser.WriteHelp(os.Stderr)
+		return loadConfigError(err)
+	}
+
+	// Make sure a valid average price mode is given.
+	switch cfg.AvgPriceMode {
+	case useVWAPStr:
+	case usePoolPriceStr:
+	case useDualPriceStr:
+	default:
+		str := "%s: Invalid average price mode '%s'"
+		err := fmt.Errorf(str, "loadConfig", cfg.AvgPriceMode)
 		fmt.Fprintln(os.Stderr, err)
 		parser.WriteHelp(os.Stderr)
 		return loadConfigError(err)
