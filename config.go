@@ -21,7 +21,6 @@ const (
 	defaultLogLevel       = "info"
 	defaultLogDirname     = "logs"
 	defaultLogFilename    = "ticketbuyer.log"
-	currentVersion        = 1
 )
 
 var activeNet = &netparams.MainNetParams
@@ -286,7 +285,7 @@ func loadConfig() (*config, error) {
 	appName := filepath.Base(os.Args[0])
 	appName = strings.TrimSuffix(appName, filepath.Ext(appName))
 	if preCfg.ShowVersion {
-		fmt.Println(appName, "version", currentVersion)
+		fmt.Println(appName, "version", version())
 		os.Exit(0)
 	}
 
